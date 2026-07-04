@@ -277,21 +277,33 @@ def start_subprograms():
     web_ui_dir = os.path.join(SUBPROGRAMS_DIR, "web-ui")
 
     if os.path.exists(voice_script):
-        proc = subprocess.Popen([sys.executable, voice_script], creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
-        subprocesses.append(proc)
+        try:
+            proc = subprocess.Popen([sys.executable, voice_script], creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
+            subprocesses.append(proc)
+        except Exception as e:
+            print(f"Warning: Failed to start voice script: {e}")
 
     if os.path.exists(whatsapp_script):
-        proc = subprocess.Popen([sys.executable, whatsapp_script], creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
-        subprocesses.append(proc)
+        try:
+            proc = subprocess.Popen([sys.executable, whatsapp_script], creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
+            subprocesses.append(proc)
+        except Exception as e:
+            print(f"Warning: Failed to start WhatsApp script: {e}")
 
     if os.path.exists(tui_script):
-        proc = subprocess.Popen([sys.executable, tui_script], creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
-        subprocesses.append(proc)
+        try:
+            proc = subprocess.Popen([sys.executable, tui_script], creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
+            subprocesses.append(proc)
+        except Exception as e:
+            print(f"Warning: Failed to start TUI script: {e}")
 
-    if os.path.exists(web_ui_dir):
+    if os.path.exists(web_ui_dir) and os.path.exists(os.path.join(web_ui_dir, "package.json")):
         npm_cmd = "npm.cmd" if os.name == "nt" else "npm"
-        proc = subprocess.Popen([npm_cmd, "run", "dev"], cwd=web_ui_dir, creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
-        subprocesses.append(proc)
+        try:
+            proc = subprocess.Popen([npm_cmd, "run", "dev"], cwd=web_ui_dir, creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
+            subprocesses.append(proc)
+        except Exception as e:
+            print(f"Warning: Failed to start web UI: {e}")
 
 
 def set_ui_target(target):
