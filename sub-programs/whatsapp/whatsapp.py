@@ -28,36 +28,6 @@ FILE_DIR = os.path.join(MASTER_DIR, r"files")
 
 CONFIG_FILE = os.path.join(Path(__file__).resolve().parent, "whatsapp_config.yaml")
 
-DEFAULT_CONFIG_TEXT = """# =================================================================
-# WhatsApp Gateway Configuration
-# =================================================================
-
-# ID_ALLOWLIST: A list of authorized WhatsApp IDs allowed to use the AI.
-ID_ALLOWLIST:
-  - "example 1"
-  - "example 2"
-
-# ADDITIONAL_YOU_CHAT_PERMISSIONS: Set to true if you want the bot to reply to your 
-# own messages in self-chats without having to include the prefix at the start of your message.
-ADDITIONAL_YOU_CHAT_PERMISSIONS: true
-
-# REPLY_PREFIX: The way the AI responds when not talking in a "you chat".
-REPLY_PREFIX: "\\n{AI_NAME}:\\n\\n"
-
-# SELF_CHAT_AGENT: The default agent handling self-chats (notebook window).
-SELF_CHAT_AGENT: "Main"
-
-# DEFAULT_AGENT: The fallback agent handling incoming chats if not specifically mapped.
-DEFAULT_AGENT: "Main"
-
-# CONTACT_AGENT_MAPPING: Maps specific contact phone numbers to agent names.
-# Example:
-# CONTACT_AGENT_MAPPING:
-#   "447123456789": "Friday"
-#   "15551234567": "Jarvis"
-CONTACT_AGENT_MAPPING: {}
-"""
-
 WEBHOOK_URL = "http://127.0.0.1:5050/api/message"
 
 def get_agent_ai_name(agent_name: str) -> str:
@@ -81,9 +51,12 @@ def load_config():
             shutil.copy(example_file, CONFIG_FILE)
             print(f"'{CONFIG_FILE}' was not found. Automatically copied from '{os.path.basename(example_file)}'.")
         else:
-            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-                f.write(DEFAULT_CONFIG_TEXT)
-            print(f"'{CONFIG_FILE}' was not found. Generated a default template.")
+            print(f"Error: '{CONFIG_FILE}' and its template '{os.path.basename(example_file)}' are both missing.")
+            print("Please restore the config template or create whatsapp_config.yaml manually.")
+            print("\nPress ENTER to close...")
+            input()
+            VALID_CONFIG = False
+            return None
             
         print("\n" + "="*60)
         print(f" ACTION REQUIRED: Please open and edit '{os.path.basename(CONFIG_FILE)}' now.")

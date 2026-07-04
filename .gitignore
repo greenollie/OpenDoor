@@ -51,6 +51,7 @@ sub-programs/web-ui/.eslintcache
 # Development logs & old-code backups
 *.log
 old-code/
+github-stuff.md
 
 # TEMP
 sub-programs\voice

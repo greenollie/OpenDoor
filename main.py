@@ -22,18 +22,6 @@ from mcp.client.stdio import stdio_client
 ROOT_DIR = Path(__file__).resolve().parent
 CONFIG_FILE = os.path.join(ROOT_DIR, "config.yaml")
 
-DEFAULT_CONFIG_TEXT = """# =================================================================
-# Core System Configuration
-# =================================================================
-
-# LATITUDE & LONGITUDE: Geographic coordinates for tools like weather reporting.
-LATITUDE: 0
-LONGITUDE: 0
-
-# DEFAULT_MODEL: The default fallback model for agents.
-DEFAULT_MODEL: "gpt-5.4-nano"
-"""
-
 # Global Configuration & State Management
 config = {}
 LATITUDE = 0.0
@@ -152,13 +140,15 @@ def load_config():
             shutil.copy(example_file, CONFIG_FILE)
             print(f"'{CONFIG_FILE}' was not found. Automatically copied from '{os.path.basename(example_file)}'.")
         else:
-            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-                f.write(DEFAULT_CONFIG_TEXT)
-            print(f"'{CONFIG_FILE}' was not found. Generated a default template.")
+            print(f"Error: '{CONFIG_FILE}' and its template '{os.path.basename(example_file)}' are both missing.")
+            print("Please restore the config template or create config.yaml manually.")
+            print("\nPress ENTER to close...")
+            input()
+            sys.exit(1)
             
         print("\n" + "="*60)
         print(f" ACTION REQUIRED: Please open and edit '{os.path.basename(CONFIG_FILE)}' now.")
-        print(" Set your LATITUDE, LONGITUDE, and DEFAULT_MODEL (and your OpenAI API key if needed).")
+        print(" Set your LATITUDE, LONGITUDE, and DEFAULT_MODEL.")
         print("="*60)
         print("\nPress ENTER when you are done editing to continue...")
         input()
