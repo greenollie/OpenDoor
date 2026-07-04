@@ -1,0 +1,164 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --bg-main: #11111b;
+  --bg-surface: rgba(24, 24, 37, 0.7);
+  --bg-surface-hover: rgba(49, 50, 68, 0.8);
+  --bg-sidebar: #181825;
+  --text-main: #cdd6f4;
+  --text-muted: #a6adc8;
+  --accent-primary: #89b4fa;
+  --accent-primary-hover: #b4befe;
+  --accent-secondary: #f5c2e7;
+  --accent-success: #a6e3a1;
+  --accent-warning: #f9e2af;
+  --accent-danger: #f38ba8;
+  
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+  --glass-blur: blur(12px);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: var(--bg-main);
+  background-image: 
+    radial-gradient(circle at 15% 50%, rgba(137, 180, 250, 0.05), transparent 25%),
+    radial-gradient(circle at 85% 30%, rgba(245, 194, 231, 0.05), transparent 25%);
+  color: var(--text-main);
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+#root {
+  height: 100%;
+  width: 100%;
+}
+
+/* Scrollbar Styles */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulseGlow {
+  0% { box-shadow: 0 0 0 0 rgba(137, 180, 250, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(137, 180, 250, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(137, 180, 250, 0); }
+}
+
+/* Utility Classes */
+.glass-panel {
+  background: var(--bg-surface);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+/* Markdown Content Styles */
+.markdown-content p:not(:last-child) {
+  margin-bottom: 12px;
+}
+.markdown-content ul, .markdown-content ol {
+  margin-bottom: 12px;
+  padding-left: 20px;
+}
+.markdown-content li {
+  margin-bottom: 4px;
+}
+.markdown-content code {
+  font-family: 'Courier New', Courier, monospace;
+  background-color: rgba(0, 0, 0, 0.3);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+.markdown-content pre {
+  background-color: rgba(0, 0, 0, 0.5);
+  padding: 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 12px 0;
+  border: 1px solid var(--glass-border);
+}
+.markdown-content pre code {
+  background-color: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-size: 0.85em;
+  display: block;
+}
+.markdown-content a {
+  color: var(--accent-primary);
+  text-decoration: underline;
+}
+.markdown-content a:hover {
+  color: var(--accent-primary-hover);
+}
+.markdown-content h1, .markdown-content h2, .markdown-content h3, 
+.markdown-content h4, .markdown-content h5, .markdown-content h6 {
+  margin-top: 16px;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: var(--accent-secondary);
+}
+.markdown-content h1 { font-size: 1.4rem; }
+.markdown-content h2 { font-size: 1.25rem; }
+.markdown-content h3 { font-size: 1.15rem; }
+.markdown-content h4 { font-size: 1.05rem; }
+.markdown-content blockquote {
+  border-left: 4px solid var(--accent-primary);
+  padding-left: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+  margin: 12px 0;
+}
+
+/* User Message Markdown Specific Colors */
+.user-msg-container.markdown-content {
+  color: #11111b;
+}
+.user-msg-container.markdown-content code {
+  background-color: rgba(0, 0, 0, 0.08);
+  color: #11111b;
+}
+.user-msg-container.markdown-content pre {
+  background-color: rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+.user-msg-container.markdown-content pre code {
+  color: #11111b;
+}
+.user-msg-container.markdown-content a {
+  color: #002244;
+}
+.user-msg-container.markdown-content h1, 
+.user-msg-container.markdown-content h2, 
+.user-msg-container.markdown-content h3, 
+.user-msg-container.markdown-content h4 {
+  color: #11111b;
+}

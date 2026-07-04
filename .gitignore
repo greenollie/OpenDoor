@@ -1,0 +1,53 @@
+# Python caching
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Environments & OS files
+.env
+.env.*
+.venv
+venv/
+ENV/
+env/
+.DS_Store
+Thumbs.db
+
+# Project local configuration
+config.yaml
+sub-programs/whatsapp/whatsapp_config.yaml
+
+# Runtime workspace & transient data
+master/
+
+# Subprogram runtime DBs and audios
+sub-programs/whatsapp/whatsapp_session.db
+sub-programs/whatsapp/temp_audio/
+sub-programs/voice/*.wav
+sub-programs/voice/wakeword/*.npy
+
+# Binaries & large ONNX models (keeps repo lightweight)
+sub-programs/voice/piper/*.exe
+sub-programs/voice/piper/*.dll
+sub-programs/voice/piper/*.onnx
+sub-programs/voice/piper/*.json
+sub-programs/voice/piper/espeak-ng-data/
+sub-programs/voice/wakeword/*.onnx
+sub-programs/voice/wakeword/*.pt
+sub-programs/voice/wakeword/background_test/
+sub-programs/voice/wakeword/background_train/
+sub-programs/voice/wakeword/negative_test/
+sub-programs/voice/wakeword/negative_train/
+sub-programs/voice/wakeword/positive_test/
+sub-programs/voice/wakeword/positive_train/
+
+# Web-UI dependencies and builds
+sub-programs/web-ui/node_modules/
+sub-programs/web-ui/dist/
+sub-programs/web-ui/.eslintcache
+
+# Development logs & old-code backups
+*.log
+old-code/
