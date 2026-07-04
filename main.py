@@ -1046,7 +1046,8 @@ def init_backend():
         soul_file = os.path.join(agent_working_path, "SOUL.md")
         if not os.path.exists(soul_file):
             with open(soul_file, "w", encoding="utf-8") as f:
-                f.write(f"You are {agent_dir}, a highly intelligent and capable AI assistant.")
+                f.write(f"""# SOUL (SOUL.md)
+You are a highly intelligent and capable AI assistant.""")
 
         mem_file = os.path.join(agent_working_path, "KEY_MEMORIES.json")
         if not os.path.exists(mem_file):

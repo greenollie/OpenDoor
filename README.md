@@ -1,4 +1,4 @@
-# OpenDoor:
+# OpenDoor
 
 OpenDoor is a modular, multi-agent AI assistant ecosystem designed to run locally on your desktop. It integrates a central **Flask API coordinator**, a **FastMCP Server** for dynamic tool execution, and multiple specialized **subprograms** for interacting with the AI via terminal, web, voice, or WhatsApp.
 
