@@ -24,7 +24,6 @@ OpenDoor is a modular, multi-agent AI assistant ecosystem designed to run locall
 - **FastMCP Server (`mcp_server.py`)**: Dynamically loads tools (from `tools/` and `master/working/custom-tools/`) and connects them via the Model Context Protocol (MCP).
 - **Textual TUI (`sub-programs/TUI/TUI.py`)**: A modern terminal interface for text chatting with auto-completion and agent selection.
 - **WhatsApp Gateway (`sub-programs/whatsapp/whatsapp.py`)**: Leverages `neonize` to connect the AI as a chatbot responder to your WhatsApp number.
-- **Voice Assistant (`sub-programs/voice/voice-detector.py`)**: Listen for hotwords using `openWakeWord`, transcribe with `Faster-Whisper`, and speak back using either `Piper TTS` (offline local TTS) or `OpenAI TTS`.
 - **Web UI (`sub-programs/web-ui/`)**: A sleek React dashboard built with Vite to manage agents, view chat logs, and toggle tools.
 
 ---
