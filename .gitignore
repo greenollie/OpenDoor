@@ -20,7 +20,10 @@ config.yaml
 sub-programs/whatsapp/whatsapp_config.yaml
 
 # Runtime workspace & transient data
-master/
+master/files/
+master/working/agents/
+master/working/custom-tools/
+master/working/skills/merge-spreadsheets/
 
 # Subprogram runtime DBs and audios
 sub-programs/whatsapp/whatsapp_session.db

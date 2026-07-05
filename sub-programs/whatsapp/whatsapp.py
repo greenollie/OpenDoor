@@ -75,38 +75,21 @@ def load_config():
         VALID_CONFIG = False
         return None
 
-    # For backwards compatibility, populate default settings if missing
+    # For backwards compatibility, merge loaded config with in-memory defaults.
+    # This avoids rewriting the config file on disk and stripping comments.
     if not isinstance(loaded_config, dict):
         loaded_config = {}
 
-    modified = False
-    if "ID_ALLOWLIST" not in loaded_config:
-        loaded_config["ID_ALLOWLIST"] = []
-        modified = True
-    if "ADDITIONAL_YOU_CHAT_PERMISSIONS" not in loaded_config:
-        loaded_config["ADDITIONAL_YOU_CHAT_PERMISSIONS"] = True
-        modified = True
-    if "REPLY_PREFIX" not in loaded_config:
-        loaded_config["REPLY_PREFIX"] = "\n{AI_NAME}:\n\n"
-        modified = True
-    if "SELF_CHAT_AGENT" not in loaded_config:
-        loaded_config["SELF_CHAT_AGENT"] = "Terry"
-        modified = True
-    if "DEFAULT_AGENT" not in loaded_config:
-        loaded_config["DEFAULT_AGENT"] = "Terry"
-        modified = True
-    if "CONTACT_AGENT_MAPPING" not in loaded_config:
-        loaded_config["CONTACT_AGENT_MAPPING"] = {}
-        modified = True
+    defaults = {
+        "ID_ALLOWLIST": [],
+        "ADDITIONAL_YOU_CHAT_PERMISSIONS": True,
+        "REPLY_PREFIX": "\n{AI_NAME}:\n\n",
+        "SELF_CHAT_AGENT": "Terry",
+        "DEFAULT_AGENT": "Terry",
+        "CONTACT_AGENT_MAPPING": {}
+    }
 
-    if modified:
-        try:
-            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-                yaml.safe_dump(loaded_config, f)
-        except Exception:
-            pass
-
-    return loaded_config
+    return {**defaults, **loaded_config}
 
 # Load and validate configuration safely
 config = load_config()

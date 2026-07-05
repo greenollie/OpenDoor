@@ -140,8 +140,31 @@ SYSTEM_FILE = os.path.join(AI_WORKSPACE_DIR, r"SYSTEM.md")
 SOUL_FILE = os.path.join(AI_WORKSPACE_DIR, r"SOUL.md")
 KEY_MEMORIES_FILE = os.path.join(AI_WORKSPACE_DIR, r"KEY_MEMORIES.json") 
 
-DEFAULT_SYSTEM_PROMPT = ""
-DEFAULT_SOUL_TEXT = ""
+DEFAULT_SYSTEM_PROMPT = """# SYSTEM (SYSTEM.md)
+
+## CONTEXT VS FILES:
+- You can already see the current conversation history in your active context. If the user asks about things you said or did inside this active chat session, just answer directly from your memory. Do NOT call a tool.
+- ONLY use 'read_file' if the user asks about a previous archived session or requires you to check a file.
+
+## CRITICAL RULES:
+1. If the user asks you to save or update something, you MUST explicitly call your writing/patching tools. Do not just talk about doing it.
+2. Never claim an update was made unless you successfully executed a tool and saw the confirmation message.
+3. When patching text using 'file_patch_text', preserve structural formatting or existing layout timestamps if present.
+4. Do not use emojis.
+
+## TOOLS:
+- To create tools, read `custom-tools/CUSTOM_TOOLS_CREATION_TUTORIAL.md` first.
+
+## MEMORY MANAGEMENT INSTRUCTIONS:
+You have a persistent core memory. You MUST actively use the `add_memory` tool to record important user preferences, ongoing projects, requested defaults, or future events. 
+- If a user states a preference or fact, save it permanently.
+- If a user mentions a temporary event (e.g., "I'm travelling to Scotland next week"), save it with an appropriate `expiry_date`.
+- If the user corrects a previous fact, use `remove_memory` on the old fact and `add_memory` for the new one.
+Do not ask permission to save a memory—just do it seamlessly in the background.
+"""
+
+DEFAULT_SOUL_TEXT = """# SOUL (SOUL.md)
+You are {agent_name}, a highly intelligent and capable AI assistant."""
 LOAD_TO_PROMPT_ON_MESSAGE = []
 SUBPROGRAMS_DIR = os.path.join(MAIN_DIR, r"sub-programs")
 
@@ -416,7 +439,17 @@ def create_agent():
     sys_file = os.path.join(agent_working_dir, "SYSTEM.md")
     if not os.path.exists(sys_file):
         with open(sys_file, "w", encoding="utf-8") as f:
-            f.write(default_system_prompt)
+            f.write(DEFAULT_SYSTEM_PROMPT)
+            
+    soul_file = os.path.join(agent_working_dir, "SOUL.md")
+    if not os.path.exists(soul_file):
+        with open(soul_file, "w", encoding="utf-8") as f:
+            f.write(DEFAULT_SOUL_TEXT.format(agent_name=agent_display_name))
+
+    mem_file = os.path.join(agent_working_dir, "KEY_MEMORIES.json")
+    if not os.path.exists(mem_file):
+        with open(mem_file, "w", encoding="utf-8") as f:
+            json.dump([], f)
     
     return jsonify({"status": "success", "agent": agent_name})
 
@@ -989,15 +1022,22 @@ def delegate_to_subagent(task_description: str, agent_name: str = "Terry", reaso
                 "gpt-3" in subagent_model or
                 "davinci" in subagent_model
             )
-            if not is_non_reasoning_model and reasoning_amount:
-                api_params["reasoning_effort"] = reasoning_amount
+            if not is_non_reasoning_model:
+                api_params["max_completion_tokens"] = 4000
+                if reasoning_amount:
+                    api_params["reasoning_effort"] = reasoning_amount
+            else:
+                api_params["max_tokens"] = 4000
 
             try:
                 response = client.chat.completions.create(**api_params)
             except Exception as api_err:
                 err_str = str(api_err).lower()
-                if "reasoning_effort" in err_str or "unsupported parameter" in err_str or "extra parameters" in err_str or "unexpected keyword" in err_str:
+                if "reasoning_effort" in err_str or "max_completion_tokens" in err_str or "unsupported parameter" in err_str or "extra parameters" in err_str or "unexpected keyword" in err_str:
                     api_params.pop("reasoning_effort", None)
+                    if "max_completion_tokens" in err_str or "max_completion_tokens" not in api_params:
+                        api_params.pop("max_completion_tokens", None)
+                        api_params["max_tokens"] = 4000
                     response = client.chat.completions.create(**api_params)
                 else:
                     raise api_err
@@ -1508,30 +1548,7 @@ To create tools, read `custom-tools/CUSTOM_TOOLS_CREATION_TUTORIAL.md` first.
     os.makedirs(agents_working_dir, exist_ok=True)
     os.makedirs(agents_files_dir, exist_ok=True)
 
-    # Define default prompts
-    default_system_prompt = """
-    # SYSTEM (SYSTEM.md)
-
-    ## CONTEXT VS FILES:
-    - You can already see the current conversation history in your active context. If the user asks about things you said or did inside this active chat session, just answer directly from your memory. Do NOT call a tool.
-    - ONLY use 'read_file' if the user asks about a previous archived session or requires you to check a file.
-
-    ## CRITICAL RULES:
-    1. If the user asks you to save or update something, you MUST explicitly call your writing/patching tools. Do not just talk about doing it.
-    2. Never claim an update was made unless you successfully executed a tool and saw the confirmation message.
-    3. When patching text using 'file_patch_text', preserve structural formatting or existing layout timestamps if present.
-    4. Do not use emojis.
-
-    ## TOOLS:
-    - To create tools, read `custom-tools\CUSTOM_TOOLS_CREATION_TUTORIAL.md` first.
-
-    ## MEMORY MANAGEMENT INSTRUCTIONS:
-    You have a persistent core memory. You MUST actively use the `add_memory` tool to record important user preferences, ongoing projects, requested defaults, or future events. 
-    - If a user states a preference or fact, save it permanently.
-    - If a user mentions a temporary event (e.g., "I'm travelling to Scotland next week"), save it with an appropriate `expiry_date`.
-    - If the user corrects a previous fact, use `remove_memory` on the old fact and `add_memory` for the new one.
-    Do not ask permission to save a memory—just do it seamlessly in the background.
-    """
+    # Define default prompts (now globally defined as DEFAULT_SYSTEM_PROMPT and DEFAULT_SOUL_TEXT)
 
 
     # 3. Check if agents directory is empty; if so, create a default 'Terry' agent
@@ -1574,13 +1591,12 @@ To create tools, read `custom-tools/CUSTOM_TOOLS_CREATION_TUTORIAL.md` first.
         sys_file = os.path.join(agent_working_path, "SYSTEM.md")
         if not os.path.exists(sys_file):
             with open(sys_file, "w", encoding="utf-8") as f:
-                f.write(default_system_prompt)
+                f.write(DEFAULT_SYSTEM_PROMPT)
 
         soul_file = os.path.join(agent_working_path, "SOUL.md")
         if not os.path.exists(soul_file):
             with open(soul_file, "w", encoding="utf-8") as f:
-                f.write(f"""# SOUL (SOUL.md)
-You are {agent_dir}, a highly intelligent and capable AI assistant.""")
+                f.write(DEFAULT_SOUL_TEXT.format(agent_name=agent_dir))
 
         mem_file = os.path.join(agent_working_path, "KEY_MEMORIES.json")
         if not os.path.exists(mem_file):
