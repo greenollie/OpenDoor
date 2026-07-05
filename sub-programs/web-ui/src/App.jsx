@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import ChatArea from './components/ChatArea';
 import MessageInput from './components/MessageInput';
-import { fetchAgents, loadAgent, fetchUpdates, sendMessage } from './api';
+import { fetchAgents, loadAgent, fetchUpdates, sendMessage, approveCommand } from './api';
 
 function App() {
   const [agents, setAgents] = useState([]);
@@ -19,7 +19,9 @@ function App() {
         channel: u.channel,
         content: u.content,
         id: u.id,
-        agent: u.type === 'agent' || u.type === 'assistant' ? agentName : null
+        agent: u.type === 'agent' || u.type === 'assistant' ? agentName : null,
+        approval_id: u.approval_id,
+        decision: u.decision
       }))
       .filter(u => u.content !== 'CLEAR');
   };
@@ -128,7 +130,9 @@ function App() {
               channel: update.channel,
               content: update.content,
               id: update.id,
-              agent: update.type === 'agent' || update.type === 'assistant' ? currentAgent : null
+              agent: update.type === 'agent' || update.type === 'assistant' ? currentAgent : null,
+              approval_id: update.approval_id,
+              decision: update.decision
             });
           }
           newId = Math.max(newId, update.id + 1);
@@ -185,7 +189,9 @@ function App() {
                 channel: update.channel,
                 content: update.content,
                 id: update.id,
-                agent: update.type === 'agent' || update.type === 'assistant' ? agent : null
+                agent: update.type === 'agent' || update.type === 'assistant' ? agent : null,
+                approval_id: update.approval_id,
+                decision: update.decision
               });
             }
             newId = Math.max(newId, update.id + 1);
@@ -250,6 +256,52 @@ function App() {
     }
   };
 
+  const handleApproveCommand = async (approvalId) => {
+    const success = await approveCommand(approvalId, 'approved');
+    if (success) {
+      setHistories(prev => {
+        const currentHist = prev[currentAgent];
+        if (!currentHist) return prev;
+        const updatedMessages = currentHist.messages.map(msg => {
+          if (msg.approval_id === approvalId) {
+            return { ...msg, decision: 'approved' };
+          }
+          return msg;
+        });
+        return {
+          ...prev,
+          [currentAgent]: {
+            ...currentHist,
+            messages: updatedMessages
+          }
+        };
+      });
+    }
+  };
+
+  const handleDenyCommand = async (approvalId) => {
+    const success = await approveCommand(approvalId, 'denied');
+    if (success) {
+      setHistories(prev => {
+        const currentHist = prev[currentAgent];
+        if (!currentHist) return prev;
+        const updatedMessages = currentHist.messages.map(msg => {
+          if (msg.approval_id === approvalId) {
+            return { ...msg, decision: 'denied' };
+          }
+          return msg;
+        });
+        return {
+          ...prev,
+          [currentAgent]: {
+            ...currentHist,
+            messages: updatedMessages
+          }
+        };
+      });
+    }
+  };
+
   const currentMessages = histories[currentAgent]?.messages || [];
 
   return (
@@ -308,7 +360,12 @@ function App() {
         </div>
 
         {/* Main Chat Area */}
-        <ChatArea history={currentMessages} agentDetails={agentDetails} />
+        <ChatArea 
+          history={currentMessages} 
+          agentDetails={agentDetails} 
+          onApprove={handleApproveCommand}
+          onDeny={handleDenyCommand}
+        />
 
         {/* Input Area */}
         <MessageInput 

@@ -34,15 +34,22 @@ ui_target = None
 ui_updates = []
 ui_updates_lock = threading.Lock()
 
-def add_ui_update(update_type, channel, content, agent="Terry"):
+pending_approvals = {}
+pending_approvals_lock = threading.Lock()
+request_context = threading.local()
+
+def add_ui_update(update_type, channel, content, agent="Terry", **kwargs):
     with ui_updates_lock:
-        ui_updates.append({
+        upd = {
             "id": len(ui_updates),
             "type": update_type,
             "channel": channel,
             "content": content,
             "agent": agent
-        })
+        }
+        upd.update(kwargs)
+        ui_updates.append(upd)
+
 
 def load_session_into_updates(agent_name):
     history = load_chat_history(agent_name)
@@ -283,7 +290,7 @@ def download_file():
 
 @webhook_app.route('/api/message', methods=['POST'])
 def handle_webhook_message():
-    data = request.json
+    data = request.json or {}
     if not data or 'text' not in data:
         return jsonify({"error": "Missing 'text' in payload"}), 400
 
@@ -291,8 +298,60 @@ def handle_webhook_message():
     text = data.get("text", "")
     agent = data.get("agent", "Terry")
     media_paths = data.get("media_paths", [])
-    reply_text = process_message(channel, text, agent, media_paths)
-    return jsonify({"reply": reply_text})
+    
+    sender_id = data.get("sender_id")
+    chat_id = data.get("chat_id")
+    
+    if channel == "WhatsApp":
+        def run_async_process(c_id, s_id):
+            request_context.channel = channel
+            request_context.sender_id = s_id
+            request_context.chat_id = c_id
+            try:
+                reply_text = process_message(channel, text, agent, media_paths)
+                if reply_text:
+                    requests.post(
+                        "http://127.0.0.1:5056/send_message",
+                        json={"chat_id": c_id, "text": reply_text},
+                        timeout=10
+                    )
+            except Exception as e:
+                print(f"[-] Error in async WhatsApp process: {e}")
+                
+        threading.Thread(target=run_async_process, args=(chat_id, sender_id), daemon=True).start()
+        return jsonify({"status": "queued"})
+    else:
+        request_context.channel = channel
+        request_context.sender_id = sender_id
+        request_context.chat_id = chat_id
+        reply_text = process_message(channel, text, agent, media_paths)
+        return jsonify({"reply": reply_text})
+
+
+@webhook_app.route('/api/approve', methods=['POST'])
+def handle_approval():
+    data = request.json or {}
+    approval_id = data.get("approval_id")
+    action = data.get("action")  # "approved" or "denied"
+    
+    if not approval_id or action not in ["approved", "denied"]:
+        return jsonify({"error": "Missing or invalid approval_id or action"}), 400
+        
+    with pending_approvals_lock:
+        if approval_id in pending_approvals:
+            info = pending_approvals[approval_id]
+            info["status"] = action
+            
+            with ui_updates_lock:
+                for u in ui_updates:
+                    if u.get("approval_id") == approval_id:
+                        u["decision"] = action
+                        
+            info["event"].set()
+            return jsonify({"status": "success"})
+            
+    return jsonify({"error": "Approval request not found or already processed"}), 404
+
 
 
 @webhook_app.route('/api/updates', methods=['GET'])
@@ -598,6 +657,64 @@ def get_mcp_tools():
 def call_mcp_tool(name: str, arguments: dict, agent_name: str = "Terry"):
     if not mcp_session:
         raise RuntimeError("MCP server not connected.")
+        
+    channel = getattr(request_context, "channel", "External")
+    if name == "run_command" and channel in ["Web", "WhatsApp"]:
+        import random
+        import time
+        approval_id = f"appr_{int(time.time())}_{random.randint(1000, 9999)}"
+        
+        event = threading.Event()
+        with pending_approvals_lock:
+            pending_approvals[approval_id] = {
+                "status": "pending",
+                "command": arguments.get("command"),
+                "event": event
+            }
+            
+        print(f"[*] Command approval requested: ID={approval_id}, Command={arguments.get('command')}")
+        
+        if channel == "Web":
+            add_ui_update(
+                update_type="approval_request",
+                channel=channel,
+                content=arguments.get("command"),
+                agent=agent_name,
+                approval_id=approval_id,
+                decision="pending"
+            )
+        elif channel == "WhatsApp":
+            sender_id = getattr(request_context, "sender_id", None)
+            chat_id = getattr(request_context, "chat_id", None)
+            if chat_id:
+                try:
+                    payload = {
+                        "chat_id": chat_id,
+                        "command": arguments.get("command"),
+                        "approval_id": approval_id,
+                        "agent_name": agent_name
+                    }
+                    resp = requests.post("http://127.0.0.1:5056/send_poll", json=payload, timeout=10)
+                    if resp.status_code != 200:
+                        print(f"[-] WhatsApp listener returned error: {resp.text}")
+                except Exception as ex:
+                    print(f"[-] Failed to communicate with WhatsApp approval listener: {ex}")
+            else:
+                print("[-] Cannot request command approval: chat_id is missing from context.")
+        
+        event.wait()
+        
+        with pending_approvals_lock:
+            approval_info = pending_approvals.get(approval_id)
+            decision = approval_info["status"] if approval_info else "denied"
+            pending_approvals.pop(approval_id, None)
+            
+        if decision != "approved":
+            print(f"[*] Command denied: ID={approval_id}")
+            return "Error: Command execution denied by user."
+            
+        print(f"[*] Command approved: ID={approval_id}, executing now...")
+
     try:
         if name in ["add_memory", "remove_memory"]:
             arguments["agent_name"] = agent_name
@@ -1160,6 +1277,7 @@ def encode_image_to_base64(image_path: str) -> str:
 
 
 def process_message(context_channel: str, clean_prompt_text: str, agent_name: str = "Terry", media_paths: list = None) -> str:
+    request_context.channel = context_channel
     if media_paths is None:
         media_paths = []
     ui_text = clean_prompt_text
@@ -1345,8 +1463,44 @@ def init_backend():
     os.makedirs(AI_WORKSPACE_DIR, exist_ok=True)
     os.makedirs(FILE_DIR, exist_ok=True)
     os.makedirs(RUBBISH_BIN_DIR, exist_ok=True)
-    os.makedirs(os.path.join(AI_WORKSPACE_DIR, "skills"), exist_ok=True)
+    
+    skills_dir = os.path.join(AI_WORKSPACE_DIR, "skills")
+    os.makedirs(skills_dir, exist_ok=True)
     os.makedirs(os.path.join(AI_WORKSPACE_DIR, "custom-tools"), exist_ok=True)
+
+    # Prepopulate default skills
+    read_session_skill_dir = os.path.join(skills_dir, "read-archived-session")
+    os.makedirs(read_session_skill_dir, exist_ok=True)
+    read_session_skill_file = os.path.join(read_session_skill_dir, "SKILL.md")
+    if not os.path.exists(read_session_skill_file):
+        with open(read_session_skill_file, "w", encoding="utf-8") as f:
+            f.write("""---
+name: read-archived-session
+description: Instructions for locating and reading archived chat sessions.
+---
+
+# Reading Archived Sessions
+
+To successfully locate and read an archived session without losing structural context, execute these steps sequentially:
+1. Invoke the `list_directory` tool with `relative_path='agents/{agent_name}/archived-sessions'` to display available sessions.
+2. Depending on what the user requested, invoke `read_file` on `agents/{agent_name}/archived-sessions/recent.md` or a specific archived session file in that folder.
+3. Output the necessary information to the user.
+""")
+
+    create_tool_skill_dir = os.path.join(skills_dir, "create-tool")
+    os.makedirs(create_tool_skill_dir, exist_ok=True)
+    create_tool_skill_file = os.path.join(create_tool_skill_dir, "SKILL.md")
+    if not os.path.exists(create_tool_skill_file):
+        with open(create_tool_skill_file, "w", encoding="utf-8") as f:
+            f.write("""---
+name: create-tool
+description: Instructions for creating new tools for the assistant.
+---
+
+# Creating Custom Tools
+
+To create tools, read `custom-tools/CUSTOM_TOOLS_CREATION_TUTORIAL.md` first.
+""")
 
     # 1. Ensure agents directories exist
     agents_working_dir = os.path.join(AI_WORKSPACE_DIR, "agents")

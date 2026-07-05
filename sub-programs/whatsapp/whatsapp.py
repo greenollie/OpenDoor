@@ -90,7 +90,7 @@ def load_config():
         loaded_config["REPLY_PREFIX"] = "\n{AI_NAME}:\n\n"
         modified = True
     if "SELF_CHAT_AGENT" not in loaded_config:
-        loaded_config["SELF_CHAT_AGENT"] = "Jarvis"
+        loaded_config["SELF_CHAT_AGENT"] = "Terry"
         modified = True
     if "DEFAULT_AGENT" not in loaded_config:
         loaded_config["DEFAULT_AGENT"] = "Terry"
@@ -120,6 +120,7 @@ if VALID_CONFIG and config is not None:
     # Global tracking variables
     my_personal_jid = None
     jid_cache = {}  
+    active_approvals = {}  
 
     # -----------------------------------------------------------------
     # Audio Subsystem Initialization
@@ -172,6 +173,49 @@ if VALID_CONFIG and config is not None:
             msg_obj = event.message
 
         if msg_obj:
+            if msg_obj.HasField('pollUpdateMessage'):
+                try:
+                    original_msg_id = msg_obj.pollUpdateMessage.pollCreationMessageKey.ID
+                    print(f"[*] Received poll update for message ID: {original_msg_id}")
+                    print(f"[*] Active approvals: {list(active_approvals.keys())}")
+                    if original_msg_id in active_approvals:
+                        approval_id = active_approvals[original_msg_id]
+                        decrypted_vote = client.decrypt_poll_vote(event)
+                        
+                        import hashlib
+                        action = None
+                        print(f"[*] Selected option hashes: {[opt.hex() for opt in decrypted_vote.selectedOptions]}")
+                        print(f"[*] Expected Approve hash: {hashlib.sha256(b'Approve').digest().hex()}")
+                        print(f"[*] Expected Deny hash: {hashlib.sha256(b'Deny').digest().hex()}")
+                        for option in decrypted_vote.selectedOptions:
+                            hash_approve = hashlib.sha256(b"Approve").digest()
+                            hash_deny = hashlib.sha256(b"Deny").digest()
+                            if option == hash_approve:
+                                action = "approved"
+                                break
+                            elif option == hash_deny:
+                                action = "denied"
+                                break
+                        
+                        if action:
+                            print(f"[*] WhatsApp User voted '{action}' for command approval ID {approval_id}")
+                            try:
+                                requests.post(
+                                    "http://127.0.0.1:5050/api/approve",
+                                    json={"approval_id": approval_id, "action": action},
+                                    timeout=5
+                                )
+                                active_approvals.pop(original_msg_id, None)
+                            except Exception as ex:
+                                print(f"[-] Failed to send vote callback to coordinator: {ex}")
+                        else:
+                            print("[-] Vote option hash did not match Approve or Deny hashes.")
+                    else:
+                        print(f"[-] Poll original message ID '{original_msg_id}' not found in active approvals.")
+                except Exception as e:
+                    print(f"[-] Error processing WhatsApp poll vote: {e}")
+                return
+
             message_text = msg_obj.conversation or (
                 msg_obj.extendedTextMessage.text if msg_obj.extendedTextMessage else None
             )
@@ -389,7 +433,9 @@ if VALID_CONFIG and config is not None:
             "channel": "WhatsApp",
             "text": message_text,
             "agent": routed_agent,
-            "media_paths": media_paths
+            "media_paths": media_paths,
+            "sender_id": sender_id,
+            "chat_id": chat_id
         }
         
         try:
@@ -491,6 +537,86 @@ if VALID_CONFIG and config is not None:
         print("=" * 60)
         print(" WhatsApp Multi-User Gateway Active (Voice + Webhook Mode)")
         print("=" * 60)
+        
+        def start_approval_listener():
+            from flask import Flask, request, jsonify
+            import logging
+            
+            listener_app = Flask("whatsapp_approval_listener")
+            log = logging.getLogger('werkzeug')
+            log.setLevel(logging.ERROR)
+            
+            @listener_app.route('/send_poll', methods=['POST'])
+            def handle_send_poll():
+                data = request.json or {}
+                chat_id = data.get("chat_id")
+                command = data.get("command")
+                approval_id = data.get("approval_id")
+                agent_name = data.get("agent_name", "Terry")
+                
+                if not chat_id or not command or not approval_id:
+                    return jsonify({"error": "Missing parameters"}), 400
+                    
+                try:
+                    from neonize.utils import build_jid
+                    from neonize.utils.enum import VoteType
+                    
+                    resolved_jid = jid_cache.get(chat_id)
+                    if not resolved_jid:
+                        resolved_jid = jid_cache.get(data.get("sender_id"))
+                    if not resolved_jid:
+                        if "@" in chat_id:
+                            user, server = chat_id.split("@", 1)
+                            resolved_jid = build_jid(user, server)
+                        else:
+                            resolved_jid = build_jid(chat_id)
+                        
+                    poll_message = client.build_poll_vote_creation(
+                        name=f"⚠️ Terminal Command Authorization\nAgent: `{agent_name}`\nCommand: `{command}`",
+                        options=["Approve", "Deny"],
+                        selectable_count=VoteType.SINGLE
+                    )
+                    
+                    res = client.send_message(resolved_jid, poll_message, add_msg_secret=True)
+                    active_approvals[res.ID] = approval_id
+                    print(f"[*] Sent approval poll for command ID {approval_id} to WhatsApp.")
+                    return jsonify({"status": "success"})
+                except Exception as e:
+                    print(f"[-] Error sending WhatsApp approval poll: {e}")
+                    return jsonify({"error": str(e)}), 500
+
+            @listener_app.route('/send_message', methods=['POST'])
+            def handle_send_message():
+                data = request.json or {}
+                chat_id = data.get("chat_id")
+                text = data.get("text")
+                
+                if not chat_id or not text:
+                    return jsonify({"error": "Missing parameters"}), 400
+                    
+                try:
+                    from neonize.utils import build_jid
+                    
+                    resolved_jid = jid_cache.get(chat_id)
+                    if not resolved_jid:
+                        if "@" in chat_id:
+                            user, server = chat_id.split("@", 1)
+                            resolved_jid = build_jid(user, server)
+                        else:
+                            resolved_jid = build_jid(chat_id)
+                            
+                    formatted_text = text.replace("**", "*")
+                    client.send_message(resolved_jid, formatted_text)
+                    return jsonify({"status": "success"})
+                except Exception as e:
+                    print(f"[-] Error sending WhatsApp async message: {e}")
+                    return jsonify({"error": str(e)}), 500
+
+            listener_app.run(host='127.0.0.1', port=5056, debug=False, use_reloader=False)
+
+        listener_thread = threading.Thread(target=start_approval_listener, daemon=True)
+        listener_thread.start()
+        print("[*] Started WhatsApp approval HTTP listener on port 5056.")
         
         print("\n[*] Connecting to WhatsApp...")
         client.connect()

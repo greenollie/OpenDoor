@@ -7,7 +7,7 @@ marked.setOptions({
   gfm: true
 });
 
-const ChatArea = ({ history, agentDetails }) => {
+const ChatArea = ({ history, agentDetails, onApprove, onDeny }) => {
   const scrollRef = useRef(null);
 
   useEffect(() => {
@@ -19,7 +19,159 @@ const ChatArea = ({ history, agentDetails }) => {
   const renderMessage = (msg, idx) => {
     const isUser = msg.type === 'user';
     const isSystem = msg.type === 'system';
+    const isApproval = msg.type === 'approval_request';
     
+    if (isApproval) {
+      const isPending = !msg.decision || msg.decision === 'pending';
+      const isApproved = msg.decision === 'approved';
+      const isDenied = msg.decision === 'denied';
+      
+      return (
+        <div key={idx} style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'flex-start',
+          marginBottom: '20px',
+          width: '100%',
+          animation: 'fadeIn 0.3s ease-out'
+        }}>
+          <div style={{
+            fontSize: '0.8rem',
+            color: 'var(--text-muted)',
+            marginBottom: '4px',
+            marginLeft: '12px'
+          }}>
+            System Security Request
+          </div>
+          <div className="glass-panel" style={{
+            width: '100%',
+            maxWidth: '600px',
+            padding: '16px 20px',
+            borderRadius: '16px',
+            backgroundColor: 'rgba(24, 24, 37, 0.95)',
+            border: '1px solid var(--glass-border)',
+            boxShadow: 'var(--glass-shadow)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-warning)', fontWeight: '600' }}>
+              <span style={{ fontSize: '1.1rem' }}>⚠️</span> Terminal Command Authorization
+            </div>
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', margin: 0 }}>
+              The agent is requesting permission to execute the following shell command:
+            </p>
+            <div style={{
+              fontFamily: 'Courier New, Courier, monospace',
+              backgroundColor: 'rgba(0, 0, 0, 0.4)',
+              padding: '12px',
+              borderRadius: '8px',
+              color: 'var(--accent-primary)',
+              fontSize: '0.9rem',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-all',
+              border: '1px solid rgba(255, 255, 255, 0.05)'
+            }}>
+              {msg.content}
+            </div>
+            
+            {isPending && (
+              <div style={{ display: 'flex', gap: '12px', marginTop: '4px' }}>
+                <button 
+                  onClick={() => onApprove(msg.approval_id)}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    backgroundColor: 'var(--accent-success)',
+                    color: '#11111b',
+                    border: 'none',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    transition: 'all 0.2s ease',
+                    boxShadow: '0 2px 8px rgba(166, 227, 161, 0.2)'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.opacity = 0.85;
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.opacity = 1;
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }}
+                >
+                  ✅ Approve
+                </button>
+                <button 
+                  onClick={() => onDeny(msg.approval_id)}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    backgroundColor: 'var(--accent-danger)',
+                    color: '#11111b',
+                    border: 'none',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    transition: 'all 0.2s ease',
+                    boxShadow: '0 2px 8px rgba(243, 139, 168, 0.2)'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.opacity = 0.85;
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.opacity = 1;
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }}
+                >
+                  ❌ Deny
+                </button>
+              </div>
+            )}
+            
+            {isApproved && (
+              <div style={{ 
+                color: 'var(--accent-success)', 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '8px', 
+                fontWeight: '600', 
+                fontSize: '0.9rem',
+                backgroundColor: 'rgba(166, 227, 161, 0.08)',
+                padding: '6px 12px',
+                borderRadius: '8px',
+                width: 'fit-content'
+              }}>
+                <span>✓</span> Execution approved.
+              </div>
+            )}
+            
+            {isDenied && (
+              <div style={{ 
+                color: 'var(--accent-danger)', 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '8px', 
+                fontWeight: '600', 
+                fontSize: '0.9rem',
+                backgroundColor: 'rgba(243, 139, 168, 0.08)',
+                padding: '6px 12px',
+                borderRadius: '8px',
+                width: 'fit-content'
+              }}>
+                <span>✗</span> Execution denied.
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
     if (isSystem) {
       return (
         <div key={idx} style={{

@@ -177,3 +177,24 @@ export const updateAgentSkills = async (agentName, disabledSkills) => {
   }
 };
 
+export const approveCommand = async (approvalId, action) => {
+  try {
+    const response = await fetch(`${BASE_URL}/approve`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        approval_id: approvalId,
+        action: action, // "approved" or "denied"
+      }),
+    });
+    if (!response.ok) throw new Error('Failed to submit command approval');
+    return true;
+  } catch (error) {
+    console.error('API Error (approveCommand):', error);
+    return false;
+  }
+};
+
+
