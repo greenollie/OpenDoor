@@ -39,13 +39,6 @@ def load_config():
             VALID_CONFIG = False
             return None
             
-        print("\n" + "="*60)
-        print(f" ACTION REQUIRED: Please open and edit '{os.path.basename(CONFIG_FILE)}' now.")
-        print(" Set your desired ART_BANNER_NAME and ART_BANNER_FONT settings.")
-        print("="*60)
-        print("\nPress ENTER when you are done editing to continue...")
-        input()
-
     try:
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             loaded_config = yaml.safe_load(f)
@@ -58,6 +51,20 @@ def load_config():
 
     if not isinstance(loaded_config, dict):
         loaded_config = {}
+
+    required_keys = ["ART_BANNER_NAME", "ART_BANNER_FONT"]
+    missing_keys = [key for key in required_keys if key not in loaded_config]
+
+    if missing_keys:
+        print("=" * 60)
+        print(f" ERROR: Missing configuration settings in '{os.path.basename(CONFIG_FILE)}'")
+        print(f" Missing fields: {', '.join(missing_keys)}")
+        print(" Please fix your config file or delete it to regenerate a fresh template.")
+        print("=" * 60)
+        print("\nPress ENTER to close...")
+        input()
+        VALID_CONFIG = False
+        return None
 
     defaults = {
         "ART_BANNER_NAME": "OPENDOOR",

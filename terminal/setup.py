@@ -1,6 +1,7 @@
 import os
 import sys
 import shutil
+import subprocess
 import requests
 import yaml
 import questionary
@@ -397,6 +398,23 @@ def edit_whatsapp_config(config_path, example_path):
     except Exception as e:
         console.print(f"[bold #f38ba8]✗ Error saving WhatsApp config: {e}[/bold #f38ba8]\n")
 
+def build_web_ui(web_ui_dir):
+    console.print(f"\n[bold #f9e2af]Building web-ui...[/bold #f9e2af]")
+    try:
+        console.print("[bold #585b70]Running npm install...[/bold #585b70]")
+        subprocess.run(["npm", "install"], cwd=web_ui_dir, shell=True, check=True)
+        
+        console.print("[bold #585b70]Running npm run build...[/bold #585b70]")
+        subprocess.run(["npm", "run", "build"], cwd=web_ui_dir, shell=True, check=True)
+        
+        console.print("[bold #a6e3a1]✓ web-ui built successfully.[/bold #a6e3a1]")
+    except subprocess.CalledProcessError as e:
+        console.print(f"[bold #f38ba8]✗ Error building web-ui: command exited with status {e.returncode}[/bold #f38ba8]\n")
+    except FileNotFoundError:
+        console.print("[bold #f38ba8]✗ Error building web-ui: 'npm' was not found. Please install Node.js and npm.[/bold #f38ba8]\n")
+    except Exception as e:
+        console.print(f"[bold #f38ba8]✗ Error building web-ui: {e}[/bold #f38ba8]\n")
+
 def main():
     # Print cool ASCII art banner
     print("")
@@ -467,10 +485,9 @@ def main():
         else:
             console.print(f"[bold #a6e3a1]✓ whatsapp_config.yaml exists.[/bold #a6e3a1]")
             
-    console.print("")
-
     # Main Menu Loop
     while True:
+        print("")
         action = ask_with_tick(
             questionary.select(
                 "What would you like to do?",
@@ -489,6 +506,7 @@ def main():
 
         elif action == "Edit config":
             while True:
+                print("")
                 # Recalculate whatsapp download status in case they downloaded it in this session
                 whatsapp_downloaded_now = whatsapp_dir.exists() and (whatsapp_dir / "whatsapp.py").exists()
                 
@@ -529,6 +547,7 @@ def main():
                 sub_programs_to_download = []
                 
             if sub_programs_to_download:
+                print("")
                 sub_program_folder = PROJECT_ROOT / "sub-programs"
                 
                 # Clean up the legacy typo folder if it exists
@@ -543,14 +562,18 @@ def main():
                     TARGET_FOLDER = f"sub-programs/{i}"
                     dest_dir = sub_program_folder / i
                     
-                    console.print(f"\n[bold #f9e2af]Downloading sub-program: {i}...[/bold #f9e2af]")
+                    console.print(f"[bold #f9e2af]Downloading sub-program: {i}...[/bold #f9e2af]")
                     download_github_folder(TARGET_FOLDER, dest_dir)
                     console.print(f"[bold #a6e3a1]✓ {i} downloaded/updated successfully.[/bold #a6e3a1]")
-                    print("")
                     
                     # Update status map for next loops
                     if i in sub_programs_dirs:
                         status_map[i] = True
+                        
+                    if i == "web-ui":
+                        build_web_ui(dest_dir)
+                        
+                    print("")
 
                 # If WhatsApp was downloaded, check and copy default config if needed
                 whatsapp_downloaded_now = whatsapp_dir.exists() and (whatsapp_dir / "whatsapp.py").exists()
@@ -560,10 +583,13 @@ def main():
                             try:
                                 shutil.copy(whatsapp_example_path, whatsapp_config_path)
                                 console.print(f"[bold #a6e3a1]✓ Copied default whatsapp_config.yaml for the newly downloaded WhatsApp sub-program.[/bold #a6e3a1]")
+                                print("")
                             except Exception as e:
                                 console.print(f"[bold #f38ba8]✗ Error copying WhatsApp config: {e}[/bold #f38ba8]")
+                                print("")
                         else:
                             console.print(f"[bold #f38ba8]✗ Error: WhatsApp config template (whatsapp_config.yaml.example) is missing![/bold #f38ba8]")
+                            print("")
 
                     # Prompt if they want to edit the newly downloaded WhatsApp config
                     if not status_map["whatsapp"]:
@@ -577,6 +603,8 @@ def main():
                         )
                         if edit_new_whatsapp:
                             edit_whatsapp_config(whatsapp_config_path, whatsapp_example_path)
+                        else:
+                            print("")
                         status_map["whatsapp"] = True
 
     console.print("\n[bold #a6e3a1]Configuration complete! Ready to start OpenDoor.[/bold #a6e3a1]")

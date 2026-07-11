@@ -46,7 +46,12 @@ if exist "%DIR%\venv\Scripts\python.exe" (
 )
 
 echo.
-echo OpenDoor setup complete! 
-echo Please restart your terminal/command prompt to apply PATH changes.
-echo "OpenDoor setup complete! You can now run 'opendoor launch --terminal' to start."
-pause
+echo OpenDoor setup complete.
+echo Please restart your terminal to apply PATH changes.
+echo.
+set /p "RUN_NOW=Would you like to run 'opendoor launch --terminal' now? (Y/n): "
+if /i "%RUN_NOW%"=="y" (
+    call "%DIR%\terminal\opendoor.bat" launch --terminal
+) else if "%RUN_NOW%"=="" (
+    call "%DIR%\terminal\opendoor.bat" launch --terminal
+)

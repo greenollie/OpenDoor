@@ -101,7 +101,7 @@ The only files strictly required to start this are `main.py`, `mcp_server.py` an
 
 ### 2. Setup
 
-Run the setup script for your platform in the project root folder. This script automatically creates the Python virtual environment, installs all pip dependencies, and adds the OpenDoor directory to your user PATH so you can run the commands from anywhere:
+Run the setup script for your platform in the project root folder. This script automatically creates the Python virtual environment, installs all dependencies, configures the terminal command `opendoor` to be globally accessible, and launches the interactive configuration wizard.
 
 #### Windows:
 Double-click `setup-windows.bat` or run in your Command Prompt/PowerShell:
@@ -116,15 +116,20 @@ chmod +x setup-linux-macos.sh
 ./setup-linux-macos.sh
 ```
 
-*Note: After running the setup script, please restart your terminal to apply the PATH changes.*
-
-### 3. Startup:
-Start OpenDoor and prepare for first startup.
-Run this in your terminal:
-```cmd
-opendoor launch --terminal
+### 3. Interactive Configuration Wizard:
+At the end of the platform setup script, the interactive wizard will launch in the same terminal window. You can also re-run it at any time using:
+```bash
+opendoor setup
+# OR
+opendoor configure
 ```
-*`--terminal` is used to allow for connecting to whatsapp and checking configs.*
+
+In the configuration wizard, you can:
+- Configure default AI models and hyper-local weather tool geolocation.
+- Check download status, install, or update sub-programs (`web-ui`, `whatsapp`, `TUI`).
+- Automatically install dependencies and build the `web-ui` (`npm install` & `npm run build`) upon download.
+
+*Note: After running the initial setup, please restart your terminal to apply the PATH changes.*
 
 ---
 
