@@ -14,6 +14,22 @@ OpenDoor is a modular, multi-agent AI assistant ecosystem designed to run locall
 
 ---
 
+## ✨ Key Features
+
+- **Multi-Agent Flask Coordinator (`main.py`)**: A centralized coordinator acting as a message/event router between custom agents and external frontends (Terminal, TUI, WhatsApp, Web).
+- **FastMCP Integration (`mcp_server.py`)**: Seamlessly implements the Model Context Protocol (MCP) to dynamically publish core system and custom tools.
+- **Hot-Reloading Tool Loader**: Automatically scans and updates active tools from the `tools/` and `master/working/custom-tools/` directories without restarting the coordinator.
+- **Interactive Consent & Approvals**: Features a secure consent flow (`ask_for_consent` tool) requiring manual user approval via API before agents run sensitive operations.
+- **Persistent Memory & Expiry**: An agent-specific persistent JSON memory structure enabling agents to store, update, retrieve, and auto-expire facts/preferences.
+- **Multiple Interface Frontends**:
+  - **Terminal TUI**: A terminal UI built with Textual for fluid agent conversations and autocompletion.
+  - **CLI Terminal Shell**: Run direct command prompts (`opendoor ask`) or interactive CLI chat sessions.
+  - **WhatsApp Bot Gateway**: Neonize-powered WhatsApp gateway to chat with agents directly on your phone.
+  - **React Web UI**: A Vite + React dashboard to inspect logs, customize agents, toggle tools, and manage skills.
+- **Developer-First Bootstrap**: Auto-copies example configuration templates and pauses setup, guiding you through setting up API keys, latitude/longitude, and default models.
+
+---
+
 ## 📸 Overview of the Ecosystem
 
 ```
@@ -119,8 +135,8 @@ Run any of the following alias commands:
 ```bash
 opendoor launch
 ```
+**The parameters `--terminal` is required on the first startup.**
 This launches the multi-agent Flask coordinator on `http://127.0.0.1:5050` and automatically boots up the subprograms (TUI, Terminal, WhatsApp, Web UI) in separate terminal/console windows depending on what is available.
-The parameters `--terminal` is required on the first startup.
 
 ### 2. Run the Terminal Client
 You can chat with your agents interactively in the terminal by running:
