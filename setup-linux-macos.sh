@@ -80,4 +80,10 @@ else
 fi
 
 echo ""
-echo "OpenDoor setup complete! You can now run 'opendoor launch --terminal' to start."
+echo "OpenDoor setup complete."
+echo "Please restart your terminal to apply PATH changes."
+echo ""
+read -p "Would you like to run 'opendoor launch --terminal' now? (Y/n): " -r RUN_NOW
+if [[ "$RUN_NOW" =~ ^[Yy]$ ]] || [[ -z "$RUN_NOW" ]]; then
+    "$DIR/terminal/opendoor" launch --terminal
+fi
