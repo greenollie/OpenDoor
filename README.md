@@ -16,7 +16,7 @@ OpenDoor is a modular, multi-agent AI assistant ecosystem designed to run locall
        ▼               ▼               ▼               ▼               ▼
 ┌──────────────┐┌──────────────┐┌──────────────┐┌──────────────┐┌──────────────┐
 │    TUI.py    ││ terminal.py  ││ whatsapp.py  ││voice-detector││    Web UI    │
-│ (Textual TUI)││ (Interactive)││ (Neonize bot)││    (SOON)    ││(Vite React)  │
+│   (Textual)  ││              ││  (Neonize)   ││    (SOON)    ││ (Vite React) │
 └──────────────┘└──────────────┘└──────────────┘└──────────────┘└──────────────┘
 ```
 
@@ -55,8 +55,6 @@ The only files strictly required to start this are `main.py`, `mcp_server.py` an
     │   └── TUI.py
     ├── terminal/              # Terminal Client & Shortcuts
     │   ├── terminal.py        # Terminal Client Core
-    │   ├── opendoor           # macOS/Linux launcher wrapper
-    │   └── opendoor.bat       # Windows launcher wrapper
     ├── whatsapp/              # WhatsApp Neonize bridge
     │   └── whatsapp.py
     └── web-ui/                # Vite React dashboard
@@ -108,7 +106,7 @@ This launches the multi-agent Flask coordinator on `http://127.0.0.1:5050` and a
 ### 2. Run the Terminal Client
 You can chat with your agents interactively in the terminal by running:
 ```bash
-opendoor
+opendoor chat
 ```
 
 Or execute one-off commands from your shell:
