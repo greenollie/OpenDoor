@@ -160,5 +160,7 @@ opendoor ask Terry "what is the weather today?"
 
 ### 🚀 In the future:
 [ ] Voice chat
+
 [ ] Maybe discord
+
 [x] Sub-agents showing on web gui side bit 
