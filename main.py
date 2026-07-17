@@ -42,6 +42,64 @@ tool_executions_log = {}
 tool_executions_lock = threading.Lock()
 request_context = threading.local()
 
+DEFAULT_CHANNEL_PROTOCOLS = {
+    "WhatsApp": {
+        "display_name": "WhatsApp Gateway",
+        "is_async": True,
+        "reply_url": "http://127.0.0.1:5056/send_message",
+        "consent_url": "http://127.0.0.1:5056/send_poll",
+        "system_instruction": "If channel is 'WhatsApp', reply naturally to the message context.",
+        "needs_image_text_indicator": True,
+        "use_ui_approval": False
+    },
+    "Voice": {
+        "display_name": "Voice Detector",
+        "is_async": False,
+        "system_instruction": "If channel is 'Voice', reply normally; your output text is handled by TTS.",
+        "needs_image_text_indicator": True,
+        "use_ui_approval": False
+    },
+    "TUI": {
+        "display_name": "TUI Interface",
+        "is_async": False,
+        "system_instruction": "If channel is 'TUI', the user is manually typing on a keyboard inside the terminal UI.",
+        "needs_image_text_indicator": True,
+        "use_ui_approval": False,
+        "supports_clear": True
+    },
+    "Terminal": {
+        "display_name": "Terminal Shell",
+        "is_async": False,
+        "system_instruction": "If channel is 'Terminal', the user is entering commands via a terminal command-line prompt.",
+        "needs_image_text_indicator": True,
+        "use_ui_approval": False,
+        "supports_clear": False
+    },
+    "Web": {
+        "display_name": "Web UI Server",
+        "is_async": False,
+        "needs_image_text_indicator": False,
+        "use_ui_approval": True
+    }
+}
+
+CHANNELS_FILE = os.path.join(ROOT_DIR, "channels.yaml")
+if not os.path.exists(CHANNELS_FILE):
+    try:
+        with open(CHANNELS_FILE, "w", encoding="utf-8") as f:
+            yaml.safe_dump(DEFAULT_CHANNEL_PROTOCOLS, f)
+        print(f"Default channels.yaml created: {CHANNELS_FILE}")
+    except Exception as e:
+        print(f"Error writing default channels.yaml: {e}")
+else:
+    try:
+        with open(CHANNELS_FILE, "r", encoding="utf-8") as f:
+            loaded = yaml.safe_load(f)
+            if isinstance(loaded, dict):
+                DEFAULT_CHANNEL_PROTOCOLS = loaded
+    except Exception as e:
+        print(f"Error loading channels.yaml: {e}")
+
 def add_ui_update(update_type, channel, content, agent="Terry", **kwargs):
     with ui_updates_lock:
         upd = {
@@ -81,7 +139,8 @@ def load_session_into_updates(agent_name):
                     channel = parts[0][1:]
                     content = parts[1]
                 
-                if has_image and channel != "Web":
+                prot = DEFAULT_CHANNEL_PROTOCOLS.get(channel, {})
+                if has_image and prot.get("needs_image_text_indicator", True):
                     content = f"🖼️ [Image Uploaded] {content}"
                 
                 ui_updates.append({
@@ -97,7 +156,8 @@ def load_session_into_updates(agent_name):
                 if content:
                     import re
                     import os
-                    if channel == "Web":
+                    prot = DEFAULT_CHANNEL_PROTOCOLS.get(channel, {})
+                    if prot.get("use_ui_approval"):
                         def replace_file_tag(m):
                             fpath = m.group(1).replace("\\", "/")
                             name = os.path.basename(fpath)
@@ -330,13 +390,22 @@ def handle_webhook_message():
     sender_id = data.get("sender_id")
     chat_id = data.get("chat_id")
     
+    protocol = data.get("protocol")
+    if not protocol:
+        protocol = DEFAULT_CHANNEL_PROTOCOLS.get(channel, {
+            "is_async": False,
+            "needs_image_text_indicator": True,
+            "use_ui_approval": False
+        })
+    
     # Check for pending text tool authorizations
     found_pending = None
     pending_appr_id = None
     with pending_approvals_lock:
         for app_id, info in pending_approvals.items():
             if info.get("status") == "pending" and info.get("agent_name") == agent:
-                if info.get("channel") not in ["Web", "WhatsApp"]:
+                info_protocol = info.get("protocol", {})
+                if not info_protocol.get("use_ui_approval") and not info_protocol.get("consent_url"):
                     found_pending = info
                     pending_appr_id = app_id
                     break
@@ -367,28 +436,31 @@ def handle_webhook_message():
             reply_text = f"⚠️ Tool Authorization is pending for agent '{agent}'. Please reply with 'yes', 'accept', or 'go' to allow the action, or 'no'/'cancel' to deny it."
             return jsonify({"reply": reply_text})
 
-    if channel == "WhatsApp":
-        def run_async_process(c_id, s_id):
+    if protocol.get("is_async"):
+        reply_url = protocol.get("reply_url")
+        def run_async_process(c_id, s_id, prot):
             request_context.channel = channel
             request_context.sender_id = s_id
             request_context.chat_id = c_id
+            request_context.protocol = prot
             try:
                 reply_text = process_message(channel, text, agent, media_paths)
-                if reply_text:
+                if reply_text and reply_url:
                     requests.post(
-                        "http://127.0.0.1:5056/send_message",
+                        reply_url,
                         json={"chat_id": c_id, "text": reply_text},
                         timeout=10
                     )
             except Exception as e:
-                print(f"[-] Error in async WhatsApp process: {e}")
+                print(f"[-] Error in async channel process: {e}")
                 
-        threading.Thread(target=run_async_process, args=(chat_id, sender_id), daemon=True).start()
+        threading.Thread(target=run_async_process, args=(chat_id, sender_id, protocol), daemon=True).start()
         return jsonify({"status": "queued"})
     else:
         request_context.channel = channel
         request_context.sender_id = sender_id
         request_context.chat_id = chat_id
+        request_context.protocol = protocol
         reply_text = process_message(channel, text, agent, media_paths)
         return jsonify({"reply": reply_text})
 
@@ -439,6 +511,14 @@ def handle_request_consent():
     sender_id = context.get("sender_id") or getattr(request_context, "sender_id", None)
     agent_name = context.get("agent_name") or "Terry"
     
+    protocol = context.get("protocol") or getattr(request_context, "protocol", {})
+    if not protocol:
+        protocol = DEFAULT_CHANNEL_PROTOCOLS.get(channel, {
+            "is_async": False,
+            "needs_image_text_indicator": True,
+            "use_ui_approval": False
+        })
+    
     approval_id = f"appr_{int(time.time())}_{random.randint(1000, 9999)}"
     event = threading.Event()
     
@@ -449,11 +529,40 @@ def handle_request_consent():
             "description": description,
             "event": event,
             "agent_name": agent_name,
-            "channel": channel
+            "channel": channel,
+            "protocol": protocol
         }
         
-    if channel not in ["Web", "WhatsApp"]:
-        # Text tool authentication for non-Web, non-WhatsApp channels
+    consent_url = protocol.get("consent_url")
+    if consent_url:
+        if chat_id:
+            try:
+                payload = {
+                    "chat_id": chat_id,
+                    "command": f"{title}\n{description}",
+                    "approval_id": approval_id,
+                    "agent_name": agent_name
+                }
+                resp = requests.post(consent_url, json=payload, timeout=10)
+                if resp.status_code != 200:
+                    print(f"[-] Consent listener returned error: {resp.text}")
+            except Exception as ex:
+                print(f"[-] Failed to communicate with consent listener: {ex}")
+        else:
+            print("[-] Cannot request consent: chat_id is missing from context.")
+    elif protocol.get("use_ui_approval"):
+        add_ui_update(
+            update_type="approval_request",
+            channel=channel,
+            content=description,
+            title=title,
+            description=description,
+            agent=agent_name,
+            approval_id=approval_id,
+            decision="pending"
+        )
+    else:
+        # Default text-based tool authorization
         auth_msg = (
             "⚠️ Tool Authorization\n"
             f"Agent: `{agent_name}`\n"
@@ -467,34 +576,6 @@ def handle_request_consent():
             content=auth_msg,
             agent=agent_name
         )
-    else:
-        if channel == "Web":
-            add_ui_update(
-                update_type="approval_request",
-                channel=channel,
-                content=description,
-                title=title,
-                description=description,
-                agent=agent_name,
-                approval_id=approval_id,
-                decision="pending"
-            )
-        elif channel == "WhatsApp":
-            if chat_id:
-                try:
-                    payload = {
-                        "chat_id": chat_id,
-                        "command": f"{title}\n{description}",
-                        "approval_id": approval_id,
-                        "agent_name": agent_name
-                    }
-                    resp = requests.post("http://127.0.0.1:5056/send_poll", json=payload, timeout=10)
-                    if resp.status_code != 200:
-                        print(f"[-] WhatsApp listener returned error: {resp.text}")
-                except Exception as ex:
-                    print(f"[-] Failed to communicate with WhatsApp approval listener: {ex}")
-            else:
-                print("[-] Cannot request consent: chat_id is missing from context.")
                 
     event.wait()
     
@@ -722,26 +803,14 @@ def update_agent_skills():
 @webhook_app.route('/api/process_viewer', methods=['GET'])
 def process_viewer():
     bg_procs = []
-    for p in subprocesses:
+    for p_entry in subprocesses:
         try:
-            args = p.args
+            proc = p_entry["process"]
+            display_name = p_entry["display_name"]
+            args = proc.args
             name = " ".join(args) if isinstance(args, list) else str(args)
-            
-            if "voice-detector.py" in name:
-                display_name = "Voice Detector"
-            elif "whatsapp.py" in name:
-                display_name = "WhatsApp Gateway"
-            elif "TUI.py" in name:
-                display_name = "TUI Interface"
-            elif "terminal.py" in name:
-                display_name = "Terminal Shell"
-            elif "npm" in name and "dev" in name:
-                display_name = "Web UI Server"
-            else:
-                display_name = name
-
-            status = "Running" if p.poll() is None else "Terminated"
-            bg_procs.append({"name": display_name, "status": status, "pid": p.pid, "command": name})
+            status = "Running" if proc.poll() is None else "Terminated"
+            bg_procs.append({"name": display_name, "status": status, "pid": proc.pid, "command": name})
         except Exception:
             pass
 
@@ -838,7 +907,8 @@ def start_subprograms():
                     stderr=subprocess.DEVNULL
                 )
             if proc:
-                subprocesses.append(proc)
+                display_name = DEFAULT_CHANNEL_PROTOCOLS.get("Voice", {}).get("display_name", "Voice Detector")
+                subprocesses.append({"process": proc, "display_name": display_name})
         except Exception as e:
             print(f"Warning: Failed to start voice script: {e}")
 
@@ -856,14 +926,16 @@ def start_subprograms():
                     stderr=subprocess.DEVNULL
                 )
             if proc:
-                subprocesses.append(proc)
+                display_name = DEFAULT_CHANNEL_PROTOCOLS.get("WhatsApp", {}).get("display_name", "WhatsApp Gateway")
+                subprocesses.append({"process": proc, "display_name": display_name})
         except Exception as e:
             print(f"Warning: Failed to start WhatsApp script: {e}")
 
     if os.path.exists(tui_script):
         proc = run_in_new_terminal([sys.executable, tui_script])
         if proc:
-            subprocesses.append(proc)
+            display_name = DEFAULT_CHANNEL_PROTOCOLS.get("TUI", {}).get("display_name", "TUI Interface")
+            subprocesses.append({"process": proc, "display_name": display_name})
         else:
             print("Warning: Failed to start TUI script in a new terminal.")
 
@@ -883,7 +955,8 @@ def start_subprograms():
                     stderr=subprocess.DEVNULL
                 )
             if proc:
-                subprocesses.append(proc)
+                display_name = DEFAULT_CHANNEL_PROTOCOLS.get("Web", {}).get("display_name", "Web UI Server")
+                subprocesses.append({"process": proc, "display_name": display_name})
         except Exception as e:
             print(f"Warning: Failed to start web UI: {e}")
 
@@ -903,21 +976,24 @@ def _ui_call(method_name, *args, **kwargs):
 
 def cleanup_subprocesses():
     print("Cleaning up subprocesses...")
-    for proc in subprocesses:
+    for p_entry in subprocesses:
         try:
+            proc = p_entry["process"]
             if os.name == "nt":
                 subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             else:
                 proc.terminate()
         except Exception:
             try:
+                proc = p_entry["process"]
                 proc.terminate()
             except Exception:
                 pass
     import time
     time.sleep(0.1)
-    for proc in subprocesses:
+    for p_entry in subprocesses:
         try:
+            proc = p_entry["process"]
             if proc.poll() is None:
                 proc.kill()
         except Exception:
@@ -1010,7 +1086,8 @@ def call_mcp_tool(name: str, arguments: dict, agent_name: str = "Terry"):
             "channel": channel,
             "sender_id": getattr(request_context, "sender_id", None),
             "chat_id": getattr(request_context, "chat_id", None),
-            "agent_name": agent_name
+            "agent_name": agent_name,
+            "protocol": getattr(request_context, "protocol", {})
         }
         
     try:
@@ -1635,10 +1712,19 @@ def encode_image_to_base64(image_path: str) -> str:
 
 def process_message(context_channel: str, clean_prompt_text: str, agent_name: str = "Terry", media_paths: list = None) -> str:
     request_context.channel = context_channel
+    protocol = getattr(request_context, "protocol", {})
+    if not protocol:
+        protocol = DEFAULT_CHANNEL_PROTOCOLS.get(context_channel, {
+            "is_async": False,
+            "needs_image_text_indicator": True,
+            "use_ui_approval": False
+        })
+        request_context.protocol = protocol
+
     if media_paths is None:
         media_paths = []
     ui_text = clean_prompt_text
-    if media_paths and context_channel != "Web":
+    if media_paths and protocol.get("needs_image_text_indicator", True):
         ui_text = f"🖼️ [Image Uploaded] {clean_prompt_text}"
     add_ui_update("user", context_channel, ui_text, agent_name)
 
@@ -1657,7 +1743,7 @@ def process_message(context_channel: str, clean_prompt_text: str, agent_name: st
             add_ui_update("system", context_channel, log_msg, agent_name)
             return log_msg
         if command == "/clear":
-            if context_channel != "TUI":
+            if not protocol.get("supports_clear"):
                 return "Clear screen command only affects the main terminal view."
             add_ui_update("system", context_channel, "CLEAR", agent_name)
             return "Screen cleared."
@@ -1699,6 +1785,21 @@ def process_message(context_channel: str, clean_prompt_text: str, agent_name: st
         os_name = "MacOS"
 
     raw_system_content = load_system_prompt(agent_name, clean_prompt_text)
+    protocol = getattr(request_context, "protocol", {})
+    channel_instruction = protocol.get("system_instruction")
+    channel_instructions_list = [
+        "IMPORTANT: You have the exact current time provided above at the very top of your system prompt. Do NOT look for an external function, tool call, or file system check to answer questions about the date or time. Read it directly from the 'CURRENT TIME' property."
+    ]
+    if channel_instruction:
+        channel_instructions_list.append(channel_instruction)
+        
+    channel_protocol_str = (
+        f"CRITICAL CHANNEL PROTOCOL:\n"
+        f"The user's current message arrived via the execution channel: '{context_channel}'.\n"
+        + "\n".join(f"- {inst}" for inst in channel_instructions_list)
+        + "\n\n"
+    )
+
     system_prompt_message = {
         "role": "system",
         "content": (
@@ -1707,12 +1808,7 @@ def process_message(context_channel: str, clean_prompt_text: str, agent_name: st
             f"You are the agent: '{agent_name}'. Your configuration-specific directory is 'agents/{agent_name}'.\n"
             f"Your archived sessions are saved under 'agents/{agent_name}/archived-sessions'.\n"
             f"{raw_system_content}\n\n"
-            f"CRITICAL CHANNEL PROTOCOL:\n"
-            f"The user's current message arrived via the execution channel: '{context_channel}'.\n"
-            f"- IMPORTANT: You have the exact current time provided above at the very top of your system prompt. Do NOT look for an external function, tool call, or file system check to answer questions about the date or time. Read it directly from the 'CURRENT TIME' property.\n"
-            f"- If channel is 'Voice', reply normally; your output text is handled by TTS.\n"
-            f"- If channel is 'WhatsApp', reply naturally to the message context.\n"
-            f"- If channel is 'TUI', the user is manually typing on a keyboard inside the terminal.\n\n"
+            f"{channel_protocol_str}"
             f"WEATHER CONTEXT HANDLING PROTOCOL:\n"
             f"- When the user requests weather metrics, match the duration context seamlessly to 'get_weather':\n"
             f"  * Current conditions/Today -> forecast_days=1\n"

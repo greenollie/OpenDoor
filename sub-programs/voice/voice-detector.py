@@ -299,9 +299,20 @@ def main():
 
                 if result_text:
                     print(f" -> Sending via Webhook: '{result_text}'")
+                    protocol = {}
+                    channels_file = os.path.join(MAIN_DIR, "channels.yaml")
+                    if os.path.exists(channels_file):
+                        try:
+                            with open(channels_file, "r", encoding="utf-8") as f:
+                                channels_data = yaml.safe_load(f) or {}
+                                protocol = channels_data.get("Voice", {})
+                        except Exception:
+                            pass
+
                     payload = {
                         "channel": "Voice",
-                        "text": result_text
+                        "text": result_text,
+                        "protocol": protocol
                     }
                     try:
                         web_response = requests.post(WEBHOOK_URL, json=payload, timeout=60)
