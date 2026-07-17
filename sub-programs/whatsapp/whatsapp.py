@@ -412,13 +412,24 @@ if VALID_CONFIG and config is not None:
         
         jid_cache[sender_id] = chat_target
         
+        protocol = {}
+        channels_file = os.path.join(MAIN_DIR, "channels.yaml")
+        if os.path.exists(channels_file):
+            try:
+                with open(channels_file, "r", encoding="utf-8") as f:
+                    channels_data = yaml.safe_load(f) or {}
+                    protocol = channels_data.get("WhatsApp", {})
+            except Exception:
+                pass
+
         payload = {
             "channel": "WhatsApp",
             "text": message_text,
             "agent": routed_agent,
             "media_paths": media_paths,
             "sender_id": sender_id,
-            "chat_id": chat_id
+            "chat_id": chat_id,
+            "protocol": protocol
         }
         
         try:

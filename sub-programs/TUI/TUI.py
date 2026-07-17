@@ -449,12 +449,23 @@ if VALID_CONFIG:
         @work(thread=True)
         def send_message_to_backend(self, text: str) -> None:
             try:
+                protocol = {}
+                channels_file = os.path.join(MAIN_DIR, "channels.yaml")
+                if os.path.exists(channels_file):
+                    try:
+                        with open(channels_file, "r", encoding="utf-8") as f:
+                            channels_data = yaml.safe_load(f) or {}
+                            protocol = channels_data.get("TUI", {})
+                    except Exception:
+                        pass
+                
                 requests.post(
                     BACKEND_URL,
                     json={
                         "channel": "TUI",
                         "text": text,
-                        "agent": self.current_agent
+                        "agent": self.current_agent,
+                        "protocol": protocol
                     },
                     timeout=300,
                 )

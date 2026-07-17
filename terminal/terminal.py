@@ -2,9 +2,25 @@ import sys
 import requests
 import time
 import threading
+import os
+import yaml
+from pathlib import Path
 
 AGENTS_URL = "http://127.0.0.1:5050/api/agents"
 MESSAGE_URL = "http://127.0.0.1:5050/api/message"
+
+MAIN_DIR = Path(__file__).resolve().parent.parent
+
+def load_channel_protocol(channel_name):
+    channels_file = os.path.join(MAIN_DIR, "channels.yaml")
+    if os.path.exists(channels_file):
+        try:
+            with open(channels_file, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+                return data.get(channel_name, {})
+        except Exception:
+            pass
+    return {}
 
 def get_available_agents():
     try:
@@ -99,7 +115,8 @@ def execute_action(agent, prompt, action="ask"):
     payload = {
         "text": prompt,
         "agent": agent,
-        "channel": "Terminal"
+        "channel": "Terminal",
+        "protocol": load_channel_protocol("Terminal")
     }
     
     request_result = {}
@@ -138,7 +155,8 @@ def execute_action(agent, prompt, action="ask"):
                         json={
                             "text": user_response,
                             "agent": agent,
-                            "channel": "Terminal"
+                            "channel": "Terminal",
+                            "protocol": load_channel_protocol("Terminal")
                         },
                         timeout=10
                     )
@@ -177,7 +195,8 @@ def execute_action(agent, prompt, action="ask"):
                 payload = {
                     "text": user_response,
                     "agent": agent,
-                    "channel": "Terminal"
+                    "channel": "Terminal",
+                    "protocol": load_channel_protocol("Terminal")
                 }
                 response = requests.post(MESSAGE_URL, json=payload)
                 response_json = response.json() if response.status_code == 200 else {}
