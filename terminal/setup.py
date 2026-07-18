@@ -45,9 +45,25 @@ else:
 CONFIG_FILE = PROJECT_ROOT / "config.yaml"
 EXAMPLE_FILE = PROJECT_ROOT / "config.yaml.example"
 
-def download_github_folder(repo_path, local_dir):
+def get_current_version():
+    version = None
+    for file_path in (CONFIG_FILE, EXAMPLE_FILE):
+        if file_path.exists():
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    cfg = yaml.safe_load(f) or {}
+                    version = cfg.get("VERSION")
+                    if version:
+                        break
+            except Exception:
+                pass
+    return version
+
+def download_github_folder(repo_path, local_dir, ref=None):
     local_dir = Path(local_dir)
     api_url = f"https://api.github.com/repos/greenollie/OpenDoor/contents/{repo_path}"
+    if ref:
+        api_url += f"?ref={ref}"
     
     headers = {
         "User-Agent": "OpenDoor-Setup-Wizard"
@@ -87,9 +103,32 @@ def download_github_folder(repo_path, local_dir):
             new_repo_path = f"{repo_path}/{subfolder_name}"
             new_local_dir = local_dir / subfolder_name
             
-            download_github_folder(new_repo_path, new_local_dir)
+            download_github_folder(new_repo_path, new_local_dir, ref)
 
 def update_line_config(lines, key, value):
+    if key == "DISABLE_WEATHER" and value is False:
+        # If the user has added their location, DISABLE_WEATHER should not be added to the config,
+        # and if it already exists in the config, it should be removed.
+        idx_to_remove = None
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if not stripped.startswith("#") and ":" in stripped:
+                k = stripped.split(":", 1)[0].strip()
+                if k == "DISABLE_WEATHER":
+                    idx_to_remove = i
+                    break
+        if idx_to_remove is not None:
+            lines_to_del = [idx_to_remove]
+            if idx_to_remove > 0:
+                prev_line = lines[idx_to_remove - 1]
+                if "# DISABLE_WEATHER:" in prev_line:
+                    lines_to_del.append(idx_to_remove - 1)
+                    if idx_to_remove > 1 and lines[idx_to_remove - 2].strip() == "":
+                        lines_to_del.append(idx_to_remove - 2)
+            for idx in sorted(lines_to_del, reverse=True):
+                lines.pop(idx)
+        return
+
     found = False
     new_value_str = f"\"{value}\"" if isinstance(value, str) else str(value).lower() if isinstance(value, bool) else str(value)
     
@@ -149,7 +188,17 @@ def ask_with_tick(question_obj, message, answer_formatter=None):
     ans_display = answer_formatter(answer) if answer_formatter else str(answer)
     sys.stdout.write("\033[A\r\033[K")
     sys.stdout.flush()
-    console.print(f"[bold #89B4FA]✓[/bold #89B4FA] [bold #cdd6f4]{message}[/bold #cdd6f4] [#89b4fa]{ans_display}[/#89b4fa]")
+    
+    is_negative = False
+    if isinstance(answer, bool):
+        is_negative = not answer
+    elif str(answer) in ("Cancel", "Exit", "None", "cancel", "exit"):
+        is_negative = True
+
+    if is_negative:
+        console.print(f"[bold #f38ba8]✗[/bold #f38ba8] [bold #cdd6f4]{message}[/bold #cdd6f4] [#f38ba8]{ans_display}[/#f38ba8]")
+    else:
+        console.print(f"[bold #89B4FA]✓[/bold #89B4FA] [bold #cdd6f4]{message}[/bold #cdd6f4] [#89b4fa]{ans_display}[/#89b4fa]")
     return answer
 
 def edit_main_config():
@@ -582,7 +631,7 @@ def main():
     except Exception:
         console.print("[bold #89b4fa]=== OpenDoor Setup Wizard ===[/bold #89b4fa]\n")
         
-    console.print("[bold #89b4fa]Welcome to the OpenDoor setup and configuration tool![/bold #89b4fa]\n")
+    console.print("[bold #89b4fa]OpenDoor setup and configuration tool[/bold #89b4fa]\n")
 
     # 1. Check sub-programs download status
     sub_programs_dirs = {
@@ -674,8 +723,13 @@ def main():
             TARGET_FOLDER = f"sub-programs/{i}"
             dest_dir = sub_program_folder / i
             
-            console.print(f"[bold #f9e2af]Downloading sub-program: {i}...[/bold #f9e2af]")
-            download_github_folder(TARGET_FOLDER, dest_dir)
+            current_ver = get_current_version()
+            if current_ver:
+                console.print(f"[bold #f9e2af]Downloading sub-program: {i} (version {current_ver})...[/bold #f9e2af]")
+                download_github_folder(TARGET_FOLDER, dest_dir, ref=current_ver)
+            else:
+                console.print(f"[bold #f9e2af]Downloading sub-program: {i}...[/bold #f9e2af]")
+                download_github_folder(TARGET_FOLDER, dest_dir)
             console.print(f"[bold #a6e3a1]✓ {i} downloaded/updated successfully.[/bold #a6e3a1]")
             
             # Update status map for next loops
