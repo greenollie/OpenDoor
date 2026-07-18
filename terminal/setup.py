@@ -106,6 +106,29 @@ def download_github_folder(repo_path, local_dir, ref=None):
             download_github_folder(new_repo_path, new_local_dir, ref)
 
 def update_line_config(lines, key, value):
+    if key == "DISABLE_WEATHER" and value is False:
+        # If the user has added their location, DISABLE_WEATHER should not be added to the config,
+        # and if it already exists in the config, it should be removed.
+        idx_to_remove = None
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if not stripped.startswith("#") and ":" in stripped:
+                k = stripped.split(":", 1)[0].strip()
+                if k == "DISABLE_WEATHER":
+                    idx_to_remove = i
+                    break
+        if idx_to_remove is not None:
+            lines_to_del = [idx_to_remove]
+            if idx_to_remove > 0:
+                prev_line = lines[idx_to_remove - 1]
+                if "# DISABLE_WEATHER:" in prev_line:
+                    lines_to_del.append(idx_to_remove - 1)
+                    if idx_to_remove > 1 and lines[idx_to_remove - 2].strip() == "":
+                        lines_to_del.append(idx_to_remove - 2)
+            for idx in sorted(lines_to_del, reverse=True):
+                lines.pop(idx)
+        return
+
     found = False
     new_value_str = f"\"{value}\"" if isinstance(value, str) else str(value).lower() if isinstance(value, bool) else str(value)
     

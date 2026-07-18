@@ -291,6 +291,7 @@ def merge_yaml_config(template_path, user_path, output_path):
         template_lines = f.readlines()
 
     merged_lines = []
+    processed_keys = set()
     i = 0
     num_lines = len(template_lines)
 
@@ -301,6 +302,7 @@ def merge_yaml_config(template_path, user_path, output_path):
         match = re.match(r'^([A-Za-z0-9_-]+)\s*:\s*(.*)$', line)
         if match and not line.startswith('#'):
             key = match.group(1)
+            processed_keys.add(key)
             
             # Find the complete block for this top-level key
             block_lines = [line]
@@ -365,6 +367,15 @@ def merge_yaml_config(template_path, user_path, output_path):
             # Add comments and spacing lines unmodified
             merged_lines.append(line)
             i += 1
+
+    if "DISABLE_WEATHER" in user_values and "DISABLE_WEATHER" not in processed_keys:
+        user_val = user_values["DISABLE_WEATHER"]
+        user_val_yaml = str(user_val).lower() if isinstance(user_val, bool) else str(user_val)
+        if merged_lines and not merged_lines[-1].endswith("\n"):
+            merged_lines.append("\n")
+        merged_lines.append("\n")
+        merged_lines.append("# DISABLE_WEATHER: Toggle weather tool visibility/execution.\n")
+        merged_lines.append(f"DISABLE_WEATHER: {user_val_yaml}\n")
 
     with open(output_path, 'w', encoding='utf-8') as f:
         f.writelines(merged_lines)
