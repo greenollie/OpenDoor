@@ -2,6 +2,17 @@ import os
 import time
 import sys
 from pathlib import Path
+
+# Force UTF-8 encoding for standard streams to prevent UnicodeEncodeError in libraries like segno on Windows
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+except Exception:
+    pass
+try:
+    sys.stderr.reconfigure(encoding='utf-8')
+except Exception:
+    pass
+
 import threading
 import re
 import subprocess

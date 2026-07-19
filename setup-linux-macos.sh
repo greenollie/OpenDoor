@@ -83,7 +83,7 @@ echo ""
 echo "OpenDoor setup complete."
 echo "Please restart your terminal to apply PATH changes."
 echo ""
-read -p "Would you like to run 'opendoor launch --terminal' now? (Y/n): " -r RUN_NOW
+read -p "Would you like to run 'opendoor launch' now? (Y/n): " -r RUN_NOW
 if [[ "$RUN_NOW" =~ ^[Yy]$ ]] || [[ -z "$RUN_NOW" ]]; then
-    "$DIR/terminal/opendoor" launch --terminal
+    "$DIR/terminal/opendoor" launch
 fi

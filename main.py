@@ -230,6 +230,28 @@ Do not ask permission to save a memory—just do it seamlessly in the background
 
 DEFAULT_SOUL_TEXT = """# SOUL (SOUL.md)
 You are {agent_name}, a highly intelligent and capable AI assistant."""
+
+def get_default_system_prompt() -> str:
+    path = os.path.join(ROOT_DIR, "SYSTEM.md.example")
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return f.read()
+        except Exception as e:
+            print(f"Error reading SYSTEM.md.example: {e}")
+    return DEFAULT_SYSTEM_PROMPT
+
+def get_default_soul_text(agent_name: str) -> str:
+    path = os.path.join(ROOT_DIR, "SOUL.md.example")
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                content = f.read()
+                return content.replace("{agent_name}", agent_name)
+        except Exception as e:
+            print(f"Error reading SOUL.md.example: {e}")
+    return DEFAULT_SOUL_TEXT.format(agent_name=agent_name)
+
 LOAD_TO_PROMPT_ON_MESSAGE = []
 SUBPROGRAMS_DIR = os.path.join(MAIN_DIR, r"sub-programs")
 
@@ -650,12 +672,12 @@ def create_agent():
     sys_file = os.path.join(agent_working_dir, "SYSTEM.md")
     if not os.path.exists(sys_file):
         with open(sys_file, "w", encoding="utf-8") as f:
-            f.write(DEFAULT_SYSTEM_PROMPT)
+            f.write(get_default_system_prompt())
             
     soul_file = os.path.join(agent_working_dir, "SOUL.md")
     if not os.path.exists(soul_file):
         with open(soul_file, "w", encoding="utf-8") as f:
-            f.write(DEFAULT_SOUL_TEXT.format(agent_name=agent_display_name))
+            f.write(get_default_soul_text(agent_display_name))
 
     mem_file = os.path.join(agent_working_dir, "KEY_MEMORIES.json")
     if not os.path.exists(mem_file):
@@ -2093,12 +2115,12 @@ To create tools, read `custom-tools/CUSTOM_TOOLS_CREATION_TUTORIAL.md` first.
         sys_file = os.path.join(agent_working_path, "SYSTEM.md")
         if not os.path.exists(sys_file):
             with open(sys_file, "w", encoding="utf-8") as f:
-                f.write(DEFAULT_SYSTEM_PROMPT)
+                f.write(get_default_system_prompt())
 
         soul_file = os.path.join(agent_working_path, "SOUL.md")
         if not os.path.exists(soul_file):
             with open(soul_file, "w", encoding="utf-8") as f:
-                f.write(DEFAULT_SOUL_TEXT.format(agent_name=agent_dir))
+                f.write(get_default_soul_text(agent_dir))
 
         mem_file = os.path.join(agent_working_path, "KEY_MEMORIES.json")
         if not os.path.exists(mem_file):

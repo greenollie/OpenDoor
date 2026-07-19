@@ -990,6 +990,7 @@ def main():
 
             # Prompt if they want to edit the newly downloaded WhatsApp config
             if not status_map["whatsapp"]:
+                print("")
                 edit_new_whatsapp = ask_with_tick(
                     questionary.confirm(
                         "Would you like to configure the newly downloaded WhatsApp gateway now?",
@@ -1025,7 +1026,7 @@ def main():
         if connect_whatsapp:
             connect_to_whatsapp(whatsapp_dir)
 
-    console.print("\n[bold #a6e3a1]Configuration complete! Ready to start OpenDoor.[/bold #a6e3a1]")
+    console.print("\n[bold #a6e3a1]Setup complete! Ready to start OpenDoor.[/bold #a6e3a1]")
 
 if __name__ == "__main__":
     try:
