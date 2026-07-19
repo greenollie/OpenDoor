@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 import shutil
 import subprocess
 import requests
@@ -69,21 +70,88 @@ def download_github_folder(repo_path, local_dir, ref=None):
         "User-Agent": "OpenDoor-Setup-Wizard"
     }
     
-    response = requests.get(api_url, headers=headers)
+    try:
+        response = requests.get(api_url, headers=headers, timeout=15)
+    except Exception as e:
+        console.print(f"[bold #f38ba8]✗ Network connection to GitHub failed: {e}[/bold #f38ba8]")
+        return False
     
     if response.status_code != 200:
-        console.print(f"[bold #f38ba8]✗ Failed to access GitHub API for path '{repo_path}'. (HTTP Status: {response.status_code})[/bold #f38ba8]")
-        return
+        if response.status_code == 404 and ref:
+            sub_program = repo_path.split('/')[-1]
+            console.print(f"[bold #f38ba8]✗ A complimentary version '{ref}' of the sub-program '{sub_program}' could not be found.[/bold #f38ba8]")
+            
+            # Fetch tags and branches
+            choices = []
+            
+            # Fetch branches
+            try:
+                branches_url = "https://api.github.com/repos/greenollie/OpenDoor/branches"
+                br_resp = requests.get(branches_url, headers=headers, timeout=10)
+                if br_resp.status_code == 200:
+                    choices.extend([b['name'] for b in br_resp.json() if 'name' in b])
+            except Exception:
+                pass
+                
+            # Fetch tags
+            try:
+                tags_url = "https://api.github.com/repos/greenollie/OpenDoor/tags"
+                t_resp = requests.get(tags_url, headers=headers, timeout=10)
+                if t_resp.status_code == 200:
+                    choices.extend([t['name'] for t in t_resp.json() if 'name' in t])
+            except Exception:
+                pass
+            
+            # De-duplicate and ensure main/master are included
+            unique_choices = []
+            for c in choices:
+                if c not in unique_choices:
+                    unique_choices.append(c)
+            
+            if "main" not in unique_choices:
+                unique_choices.insert(0, "main")
+            if "master" not in unique_choices and "master" in choices:
+                unique_choices.append("master")
+                
+            unique_choices.append("Enter version/ref manually...")
+            
+            selected_ref = ask_with_tick(
+                questionary.select(
+                    "Please select an alternative version to download:",
+                    choices=unique_choices,
+                    style=tui_style
+                ),
+                "Please select an alternative version to download:"
+            )
+            
+            if selected_ref == "Enter version/ref manually...":
+                selected_ref = ask_with_tick(
+                    questionary.text(
+                        "Enter custom version/ref (branch, tag, or commit SHA):",
+                        style=tui_style
+                    ),
+                    "Enter custom version/ref (branch, tag, or commit SHA):"
+                )
+            
+            if not selected_ref:
+                return False
+                
+            console.print(f"[bold #f9e2af]Retrying download of sub-program: {sub_program} (version {selected_ref})...[/bold #f9e2af]")
+            return download_github_folder(repo_path, local_dir, ref=selected_ref)
+        else:
+            console.print(f"[bold #f38ba8]✗ Failed to access GitHub API for path '{repo_path}'. (HTTP Status: {response.status_code})[/bold #f38ba8]")
+            return False
 
     try:
         items = response.json()
     except Exception as e:
         console.print(f"[bold #f38ba8]✗ Failed to parse JSON response: {e}[/bold #f38ba8]")
-        return
+        return False
     
     # Create the local directory if it doesn't exist
     os.makedirs(local_dir, exist_ok=True)
     
+    success = True
     for item in items:
         if item['type'] == 'file':
             file_name = item['name']
@@ -92,18 +160,22 @@ def download_github_folder(repo_path, local_dir, ref=None):
             
             console.print(f"  → Downloading: {repo_path}/{file_name}", style="#585b70")
             try:
-                file_data = requests.get(file_url, headers=headers).content
+                file_data = requests.get(file_url, headers=headers, timeout=15).content
                 with open(local_file_path, 'wb') as f:
                     f.write(file_data)
             except Exception as e:
                 console.print(f"  [bold #f38ba8]✗ Failed to download {file_name}: {e}[/bold #f38ba8]")
+                success = False
                 
         elif item['type'] == 'dir':
             subfolder_name = item['name']
             new_repo_path = f"{repo_path}/{subfolder_name}"
             new_local_dir = local_dir / subfolder_name
             
-            download_github_folder(new_repo_path, new_local_dir, ref)
+            if not download_github_folder(new_repo_path, new_local_dir, ref):
+                success = False
+                
+    return success
 
 def update_line_config(lines, key, value):
     if key == "DISABLE_WEATHER" and value is False:
@@ -228,7 +300,6 @@ def edit_main_config():
         "gpt-5.6-luna",
         "gpt-5.5-pro",
         "gpt-5.5",
-        "gpt-5.5-pro",
         "gpt-5.4-pro",
         "gpt-5.4",
         "gpt-5.4-mini",
@@ -238,10 +309,8 @@ def edit_main_config():
     
     main_choices = MODEL_CHOICES.copy()
     if default_main not in main_choices:
-        main_choices.insert(0, default_main)
-    else:
-        main_choices.remove(default_main)
-        main_choices.insert(0, default_main)
+        custom_index = main_choices.index("Custom (Enter manually)")
+        main_choices.insert(custom_index, default_main)
 
     selected_main = ask_with_tick(
         questionary.select(
@@ -264,10 +333,8 @@ def edit_main_config():
     # 2. Subagent Model Selection
     sub_choices = MODEL_CHOICES.copy()
     if default_sub not in sub_choices:
-        sub_choices.insert(0, default_sub)
-    else:
-        sub_choices.remove(default_sub)
-        sub_choices.insert(0, default_sub)
+        custom_index = sub_choices.index("Custom (Enter manually)")
+        sub_choices.insert(custom_index, default_sub)
 
     selected_sub = ask_with_tick(
         questionary.select(
@@ -381,24 +448,35 @@ def edit_whatsapp_config(config_path, example_path):
         cfg = {}
 
     current_allowlist = cfg.get("ID_ALLOWLIST", ["123456789012345"])
+    current_trigger_prefix = cfg.get("TRIGGER_PREFIX", "to ai:")
     current_you_chat_perms = cfg.get("ADDITIONAL_YOU_CHAT_PERMISSIONS", True)
     current_reply_prefix = cfg.get("REPLY_PREFIX", "{AI_NAME}:\n\n")
     current_self_chat_agent = cfg.get("SELF_CHAT_AGENT", "Terry")
     current_default_agent = cfg.get("DEFAULT_AGENT", "Terry")
 
-    # 1. ID ALLOWLIST
+    # 1. PHONE NUMBER ALLOWLIST
     default_allowlist_str = ", ".join(current_allowlist) if isinstance(current_allowlist, list) else str(current_allowlist)
     allowlist_input = ask_with_tick(
         questionary.text(
-            "Enter authorized WhatsApp IDs (comma-separated):",
+            "Enter authorized WhatsApp phone numbers/IDs (comma-separated):",
             default=default_allowlist_str,
             style=tui_style
         ),
-        "Enter authorized WhatsApp IDs (comma-separated):"
+        "Enter authorized WhatsApp phone numbers/IDs (comma-separated):"
     )
     new_allowlist = [x.strip() for x in allowlist_input.split(",") if x.strip()]
 
-    # 2. ADDITIONAL YOU CHAT PERMISSIONS
+    # 2. TRIGGER PREFIX
+    new_trigger_prefix = ask_with_tick(
+        questionary.text(
+            "Enter trigger prefix (e.g. 'to ai:', or leave empty for none):",
+            default=current_trigger_prefix,
+            style=tui_style
+        ),
+        "Enter trigger prefix:"
+    )
+
+    # 3. ADDITIONAL YOU CHAT PERMISSIONS
     new_you_chat_perms = ask_with_tick(
         questionary.confirm(
             "Enable replying to own messages in self-chats without prefix?",
@@ -408,43 +486,12 @@ def edit_whatsapp_config(config_path, example_path):
         "Enable replying to own messages in self-chats without prefix?"
     )
 
-    # 3. REPLY PREFIX
-    default_reply_prefix_escaped = current_reply_prefix.replace("\n", "\\n")
-    reply_prefix_input = ask_with_tick(
-        questionary.text(
-            "Enter reply prefix (use \\n for newlines):",
-            default=default_reply_prefix_escaped,
-            style=tui_style
-        ),
-        "Enter reply prefix:"
-    )
-    new_reply_prefix = reply_prefix_input.replace("\\n", "\n")
-
-    # 4. SELF CHAT AGENT
-    new_self_chat_agent = ask_with_tick(
-        questionary.text(
-            "Enter self-chat agent name:",
-            default=current_self_chat_agent,
-            style=tui_style
-        ),
-        "Enter self-chat agent name:"
-    )
-
-    # 5. DEFAULT AGENT
-    new_default_agent = ask_with_tick(
-        questionary.text(
-            "Enter fallback/default agent name:",
-            default=current_default_agent,
-            style=tui_style
-        ),
-        "Enter fallback/default agent name:"
-    )
-
     cfg["ID_ALLOWLIST"] = new_allowlist
+    cfg["TRIGGER_PREFIX"] = new_trigger_prefix
     cfg["ADDITIONAL_YOU_CHAT_PERMISSIONS"] = new_you_chat_perms
-    cfg["REPLY_PREFIX"] = new_reply_prefix
-    cfg["SELF_CHAT_AGENT"] = new_self_chat_agent
-    cfg["DEFAULT_AGENT"] = new_default_agent
+    cfg["REPLY_PREFIX"] = current_reply_prefix
+    cfg["SELF_CHAT_AGENT"] = current_self_chat_agent
+    cfg["DEFAULT_AGENT"] = current_default_agent
 
     try:
         with open(config_path, "w", encoding="utf-8") as f:
@@ -622,6 +669,182 @@ def change_api_keys():
     else:
         console.print("[bold #f38ba8]✗ OpenAI API Key cannot be empty. No changes made.[/bold #f38ba8]")
 
+def connect_to_whatsapp(whatsapp_dir):
+    import sqlite3
+    db_path = whatsapp_dir / "whatsapp_session.db"
+    qr_path = whatsapp_dir / "whatsapp_qr.png"
+    qr_txt_path = whatsapp_dir / "whatsapp_qr.txt"
+    log_file_path = whatsapp_dir / "whatsapp.log"
+
+    console.print("\n[bold #89b4fa]=== WhatsApp Connection Utility ===[/bold #89b4fa]\n")
+
+    # Helper function to perform system-wide process termination
+    def force_kill_system_processes():
+        if sys.platform == "win32":
+            try:
+                subprocess.run(
+                    ["powershell", "-Command", "Get-CimInstance Win32_Process -Filter \"CommandLine LIKE '%whatsapp.py%'\" | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+            except Exception:
+                pass
+            try:
+                subprocess.run(
+                    ["wmic", "process", "where", "CommandLine like '%whatsapp.py%'", "call", "terminate"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+            except Exception:
+                pass
+        else:
+            try:
+                subprocess.run(["pkill", "-f", "whatsapp.py"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception:
+                pass
+
+    # 1. Delete the current whatsapp_session.db file
+    if db_path.exists():
+        try:
+            db_path.unlink()
+            console.print("[bold #a6e3a1]✓ Deleted existing WhatsApp session database.[/bold #a6e3a1]")
+        except Exception as e:
+            console.print(f"[bold #f38ba8]✗ Failed to delete session database: {e}[/bold #f38ba8]")
+    
+    # Also delete existing QR assets and log file to avoid stale states
+    for p in (qr_path, qr_txt_path):
+        if p.exists():
+            try:
+                p.unlink()
+            except Exception:
+                pass
+
+    if log_file_path.exists():
+        try:
+            log_file_path.unlink()
+        except Exception:
+            pass
+
+    # 2. Stop whatsapp.py if it is running
+    console.print("[bold #585b70]Stopping any running whatsapp.py processes...[/bold #585b70]")
+    force_kill_system_processes()
+
+    # Give it a short pause to ensure processes are cleaned up
+    time.sleep(1)
+
+    # 3. Start whatsapp.py
+    console.print("[bold #585b70]Starting whatsapp.py as a background process...[/bold #585b70]")
+    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
+    proc = None
+    try:
+        f_log = open(log_file_path, "w", encoding="utf-8")
+        proc = subprocess.Popen(
+            [sys.executable, "-u", "whatsapp.py"],
+            cwd=str(whatsapp_dir),
+            stdout=f_log,
+            stderr=subprocess.STDOUT,
+            creationflags=creationflags
+        )
+    except Exception as e:
+        console.print(f"[bold #f38ba8]✗ Failed to start whatsapp.py: {e}[/bold #f38ba8]")
+        return
+
+    # Helper function to check if database has authenticated device
+    def is_authenticated():
+        if not db_path.exists():
+            return False
+        try:
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='whatsmeow_device'")
+            if not cursor.fetchone():
+                conn.close()
+                return False
+            cursor.execute("SELECT * FROM whatsmeow_device")
+            rows = cursor.fetchall()
+            conn.close()
+            return len(rows) > 0
+        except Exception:
+            return False
+
+    # 4. Wait till \sub-programs\whatsapp\whatsapp_qr.txt exists
+    console.print("[bold #f9e2af]Waiting for WhatsApp QR Code to be generated...[/bold #f9e2af]")
+    
+    qr_opened = False
+    time.sleep(0.5)  # Give process a moment to initialize the log file
+    
+    try:
+        # Loop while either we don't have the QR code or we are not yet authenticated
+        while True:
+            # Check if process is dead
+            if proc.poll() is not None:
+                # If it died, read logs and print them to help the user diagnose the failure
+                if log_file_path.exists():
+                    try:
+                        with open(log_file_path, "r", encoding="utf-8", errors="replace") as f_err:
+                            console.print("\n[bold #f38ba8]Error Logs from whatsapp.py:[/bold #f38ba8]")
+                            print(f_err.read())
+                    except Exception:
+                        pass
+                console.print("\n[bold #f38ba8]✗ whatsapp.py process exited unexpectedly.[/bold #f38ba8]")
+                f_log.close()
+                return
+
+            # Trigger QR Code viewer once the file is generated
+            if not qr_opened and qr_txt_path.exists():
+                qr_opened = True
+                console.print(f"\n[bold #a6e3a1]✓ QR Code generated successfully![/bold #a6e3a1]\n")
+                
+                try:
+                    import segno
+                    with open(qr_txt_path, "rb") as f_txt:
+                        data_qr = f_txt.read()
+                    qr = segno.make_qr(data_qr)
+                    console.print("[bold #89b4fa]Scan this QR code with WhatsApp on your phone (Linked Devices):[/bold #89b4fa]\n")
+                    qr.terminal(compact=True, border=1)
+                except Exception as e:
+                    console.print(f"[bold #f38ba8]✗ Error rendering QR code in terminal: {e}[/bold #f38ba8]")
+
+                console.print("\n[bold #585b70]Waiting for authentication...[/bold #585b70]")
+
+            # Check for successful authentication
+            if is_authenticated():
+                console.print("\n[bold #a6e3a1]✓ Authentication detected! Finalizing connection...[/bold #a6e3a1]")
+                for i in range(10, 0, -1):
+                    #console.print(f"[bold #585b70]{i}...[/bold #585b70]", end=" ")
+                    time.sleep(1.0)
+                #console.print()
+                break
+
+            time.sleep(0.5)
+    finally:
+        f_log.close()
+
+    console.print("\n[bold #a6e3a1]✓ WhatsApp session established successfully![/bold #a6e3a1]")
+
+    # 5. Stop the background whatsapp.py process since setup is complete
+    console.print("[bold #585b70]Stopping the background whatsapp.py process...[/bold #585b70]")
+    if proc:
+        try:
+            proc.terminate()
+            try:
+                proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+        except Exception:
+            pass
+    force_kill_system_processes()
+
+    # Delete the QR code files after finishing
+    for p in (qr_path, qr_txt_path):
+        if p.exists():
+            try:
+                p.unlink()
+            except Exception:
+                pass
+    console.print("[bold #a6e3a1]✓ Cleaned up WhatsApp QR code assets.[/bold #a6e3a1]")
+
 def main():
     # Print cool ASCII art banner
     print("")
@@ -726,18 +949,21 @@ def main():
             current_ver = get_current_version()
             if current_ver:
                 console.print(f"[bold #f9e2af]Downloading sub-program: {i} (version {current_ver})...[/bold #f9e2af]")
-                download_github_folder(TARGET_FOLDER, dest_dir, ref=current_ver)
+                download_success = download_github_folder(TARGET_FOLDER, dest_dir, ref=current_ver)
             else:
                 console.print(f"[bold #f9e2af]Downloading sub-program: {i}...[/bold #f9e2af]")
-                download_github_folder(TARGET_FOLDER, dest_dir)
-            console.print(f"[bold #a6e3a1]✓ {i} downloaded/updated successfully.[/bold #a6e3a1]")
+                download_success = download_github_folder(TARGET_FOLDER, dest_dir)
             
-            # Update status map for next loops
-            if i in sub_programs_dirs:
-                status_map[i] = True
-                
-            if i == "web-ui":
-                build_web_ui(dest_dir)
+            if download_success:
+                console.print(f"[bold #a6e3a1]✓ {i} downloaded/updated successfully.[/bold #a6e3a1]")
+                # Update status map for next loops
+                if i in sub_programs_dirs:
+                    status_map[i] = True
+                    
+                if i == "web-ui":
+                    build_web_ui(dest_dir)
+            else:
+                console.print(f"[bold #f38ba8]✗ Failed to download/update {i}.[/bold #f38ba8]")
                 
             print("")
 
@@ -759,6 +985,7 @@ def main():
 
             # Prompt if they want to edit the newly downloaded WhatsApp config
             if not status_map["whatsapp"]:
+                print("")
                 edit_new_whatsapp = ask_with_tick(
                     questionary.confirm(
                         "Would you like to configure the newly downloaded WhatsApp gateway now?",
@@ -781,7 +1008,20 @@ def main():
 
     change_api_keys()
 
-    console.print("\n[bold #a6e3a1]Configuration complete! Ready to start OpenDoor.[/bold #a6e3a1]")
+    whatsapp_downloaded_now = whatsapp_dir.exists() and (whatsapp_dir / "whatsapp.py").exists()
+    if whatsapp_downloaded_now:
+        connect_whatsapp = ask_with_tick(
+            questionary.confirm(
+                "Would you like to connect to WhatsApp now?",
+                default=False,
+                style=tui_style
+            ),
+            "Would you like to connect to WhatsApp now?"
+        )
+        if connect_whatsapp:
+            connect_to_whatsapp(whatsapp_dir)
+
+    console.print("\n[bold #a6e3a1]Setup complete! Ready to start OpenDoor.[/bold #a6e3a1]")
 
 if __name__ == "__main__":
     try:
