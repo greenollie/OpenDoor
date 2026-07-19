@@ -70,21 +70,88 @@ def download_github_folder(repo_path, local_dir, ref=None):
         "User-Agent": "OpenDoor-Setup-Wizard"
     }
     
-    response = requests.get(api_url, headers=headers)
+    try:
+        response = requests.get(api_url, headers=headers, timeout=15)
+    except Exception as e:
+        console.print(f"[bold #f38ba8]✗ Network connection to GitHub failed: {e}[/bold #f38ba8]")
+        return False
     
     if response.status_code != 200:
-        console.print(f"[bold #f38ba8]✗ Failed to access GitHub API for path '{repo_path}'. (HTTP Status: {response.status_code})[/bold #f38ba8]")
-        return
+        if response.status_code == 404 and ref:
+            sub_program = repo_path.split('/')[-1]
+            console.print(f"[bold #f38ba8]✗ A complimentary version '{ref}' of the sub-program '{sub_program}' could not be found.[/bold #f38ba8]")
+            
+            # Fetch tags and branches
+            choices = []
+            
+            # Fetch branches
+            try:
+                branches_url = "https://api.github.com/repos/greenollie/OpenDoor/branches"
+                br_resp = requests.get(branches_url, headers=headers, timeout=10)
+                if br_resp.status_code == 200:
+                    choices.extend([b['name'] for b in br_resp.json() if 'name' in b])
+            except Exception:
+                pass
+                
+            # Fetch tags
+            try:
+                tags_url = "https://api.github.com/repos/greenollie/OpenDoor/tags"
+                t_resp = requests.get(tags_url, headers=headers, timeout=10)
+                if t_resp.status_code == 200:
+                    choices.extend([t['name'] for t in t_resp.json() if 'name' in t])
+            except Exception:
+                pass
+            
+            # De-duplicate and ensure main/master are included
+            unique_choices = []
+            for c in choices:
+                if c not in unique_choices:
+                    unique_choices.append(c)
+            
+            if "main" not in unique_choices:
+                unique_choices.insert(0, "main")
+            if "master" not in unique_choices and "master" in choices:
+                unique_choices.append("master")
+                
+            unique_choices.append("Enter version/ref manually...")
+            
+            selected_ref = ask_with_tick(
+                questionary.select(
+                    "Please select an alternative version to download:",
+                    choices=unique_choices,
+                    style=tui_style
+                ),
+                "Please select an alternative version to download:"
+            )
+            
+            if selected_ref == "Enter version/ref manually...":
+                selected_ref = ask_with_tick(
+                    questionary.text(
+                        "Enter custom version/ref (branch, tag, or commit SHA):",
+                        style=tui_style
+                    ),
+                    "Enter custom version/ref (branch, tag, or commit SHA):"
+                )
+            
+            if not selected_ref:
+                return False
+                
+            console.print(f"[bold #f9e2af]Retrying download of sub-program: {sub_program} (version {selected_ref})...[/bold #f9e2af]")
+            return download_github_folder(repo_path, local_dir, ref=selected_ref)
+        else:
+            console.print(f"[bold #f38ba8]✗ Failed to access GitHub API for path '{repo_path}'. (HTTP Status: {response.status_code})[/bold #f38ba8]")
+            return False
 
     try:
         items = response.json()
     except Exception as e:
         console.print(f"[bold #f38ba8]✗ Failed to parse JSON response: {e}[/bold #f38ba8]")
-        return
+        return False
     
     # Create the local directory if it doesn't exist
     os.makedirs(local_dir, exist_ok=True)
     
+    success = True
     for item in items:
         if item['type'] == 'file':
             file_name = item['name']
@@ -93,18 +160,22 @@ def download_github_folder(repo_path, local_dir, ref=None):
             
             console.print(f"  → Downloading: {repo_path}/{file_name}", style="#585b70")
             try:
-                file_data = requests.get(file_url, headers=headers).content
+                file_data = requests.get(file_url, headers=headers, timeout=15).content
                 with open(local_file_path, 'wb') as f:
                     f.write(file_data)
             except Exception as e:
                 console.print(f"  [bold #f38ba8]✗ Failed to download {file_name}: {e}[/bold #f38ba8]")
+                success = False
                 
         elif item['type'] == 'dir':
             subfolder_name = item['name']
             new_repo_path = f"{repo_path}/{subfolder_name}"
             new_local_dir = local_dir / subfolder_name
             
-            download_github_folder(new_repo_path, new_local_dir, ref)
+            if not download_github_folder(new_repo_path, new_local_dir, ref):
+                success = False
+                
+    return success
 
 def update_line_config(lines, key, value):
     if key == "DISABLE_WEATHER" and value is False:
@@ -883,18 +954,21 @@ def main():
             current_ver = get_current_version()
             if current_ver:
                 console.print(f"[bold #f9e2af]Downloading sub-program: {i} (version {current_ver})...[/bold #f9e2af]")
-                download_github_folder(TARGET_FOLDER, dest_dir, ref=current_ver)
+                download_success = download_github_folder(TARGET_FOLDER, dest_dir, ref=current_ver)
             else:
                 console.print(f"[bold #f9e2af]Downloading sub-program: {i}...[/bold #f9e2af]")
-                download_github_folder(TARGET_FOLDER, dest_dir)
-            console.print(f"[bold #a6e3a1]✓ {i} downloaded/updated successfully.[/bold #a6e3a1]")
+                download_success = download_github_folder(TARGET_FOLDER, dest_dir)
             
-            # Update status map for next loops
-            if i in sub_programs_dirs:
-                status_map[i] = True
-                
-            if i == "web-ui":
-                build_web_ui(dest_dir)
+            if download_success:
+                console.print(f"[bold #a6e3a1]✓ {i} downloaded/updated successfully.[/bold #a6e3a1]")
+                # Update status map for next loops
+                if i in sub_programs_dirs:
+                    status_map[i] = True
+                    
+                if i == "web-ui":
+                    build_web_ui(dest_dir)
+            else:
+                console.print(f"[bold #f38ba8]✗ Failed to download/update {i}.[/bold #f38ba8]")
                 
             print("")
 
