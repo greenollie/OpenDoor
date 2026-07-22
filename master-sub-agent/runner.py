@@ -69,13 +69,16 @@ def run_master_subagent(task_instruction: str, agent_name: str = "Terry", ui_cal
         "   - 'Tester and Debugger': Testing execution, inspecting command outputs and logs.\n\n"
         "3. MANDATORY 3-PHASE WORKFLOW RULES:\n"
         "   - PHASE 1 (RESEARCH): Call the 'Researcher' sub-agent first to gather information, inspect directory contents, or perform web/documentation research.\n"
-        f"   - PHASE 2 (IMPLEMENTATION PLAN): BEFORE calling any execution agent (Coder, File Manager, System Manager, Tester and Debugger), "
-        f"     you MUST create and finish a detailed implementation plan file located specifically in the main agent's directory: "
-        f"     'agents/{agent_name}/implementation_plan.md' using 'write_file'. The implementation plan must outline "
-        f"     all proposed changes, tasks, sub-agents to use, and verification steps. DO NOT invoke Coder, File Manager, System Manager, "
-        f"     or Tester and Debugger until 'agents/{agent_name}/implementation_plan.md' is finished!\n"
-        f"   - PHASE 3 (EXECUTION & UPDATES): Call the appropriate execution sub-agents to perform the planned tasks. Update "
-        f"     'agents/{agent_name}/implementation_plan.md' and 'update_task_status' throughout progress as tasks are completed or updated."
+        "   - PHASE 2 (IMPLEMENTATION PLAN): BEFORE calling any execution agent (Coder, File Manager, System Manager, Tester and Debugger), "
+        "     you MUST create and finish a detailed implementation plan file located specifically in the shared artifacts directory: "
+        "     'artifacts/implementation_plan.md' using 'write_file'. The implementation plan must outline "
+        "     all proposed changes, tasks, sub-agents to use, and verification steps. DO NOT invoke Coder, File Manager, System Manager, "
+        "     or Tester and Debugger until 'artifacts/implementation_plan.md' is finished!\n"
+        "   - PHASE 3 (EXECUTION & UPDATES): Call the appropriate execution sub-agents to perform the planned tasks. Update "
+        "     'artifacts/implementation_plan.md' and 'update_task_status' throughout progress as tasks are completed or updated.\n\n"
+        "4. SHARED TEMPORARY ARTIFACTS RULE:\n"
+        "   The 'artifacts/' directory is strictly for temporary inter-agent scratch files and notes. Do NOT store anything important for the end user in 'artifacts/', "
+        "   as all files inside 'artifacts/' will be automatically deleted/cleaned up when new tasks are created or cleanup is run. Place all permanent user deliverables in main workspace files."
     )
 
     if ui_callback:

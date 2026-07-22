@@ -5,9 +5,6 @@ set -e
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-echo "========================================="
-echo "      OpenDoor Unix Environment Setup"
-echo "========================================="
 echo "Project directory: $DIR"
 
 # 1. Create virtual environment if it doesn't exist
@@ -22,6 +19,7 @@ fi
 # 2. Install requirements
 echo ""
 echo "[2/4] Installing/upgrading requirements..."
+"$DIR/venv/bin/pip" install --only-binary :all: "litellm>=1.60.0"
 "$DIR/venv/bin/pip" install -r "$DIR/requirements.txt"
 
 # 3. Make wrappers executable

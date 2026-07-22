@@ -4,9 +4,6 @@ setlocal enabledelayedexpansion
 set "DIR=%~dp0"
 if "%DIR:~-1%"=="\" set "DIR=%DIR:~0,-1%"
 
-echo =========================================
-echo       OpenDoor Windows Environment Setup
-echo =========================================
 echo Project directory: "%DIR%"
 
 REM 1. Create virtual environment if it doesn't exist
@@ -26,6 +23,7 @@ if not exist "%DIR%\venv" (
 REM 2. Install/Upgrade requirements
 echo.
 echo [2/3] Installing/upgrading requirements...
+"%DIR%\venv\Scripts\pip" install --only-binary :all: "litellm>=1.60.0"
 "%DIR%\venv\Scripts\pip" install -r "%DIR%\requirements.txt"
 if errorlevel 1 (
     echo WARNING: Pip installation encountered errors. Please check your internet connection or requirements.txt

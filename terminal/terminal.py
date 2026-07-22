@@ -247,7 +247,11 @@ def run_interactive_session(agent_list):
         
     if not agent:
         agent = default_agent
-    if agent not in agent_list:
+
+    matched = next((a for a in agent_list if a.lower() == agent.lower()), None)
+    if matched:
+        agent = matched
+    else:
         print(f"Warning: Agent '{agent}' is not in the available agents list. Attempting to connect...")
         
     print(f"\nConnected to '{agent}'. Type 'exit' or 'quit' to end the session.")
@@ -407,6 +411,10 @@ def main():
         else:
             agent = "Terry"
             
+        matched = next((a for a in agent_list if a.lower() == agent.lower()), None)
+        if matched:
+            agent = matched
+
         if agent in agent_list:
             if action in ["ask", "tell"]:
                 prompt = " ".join(arguments[2:])

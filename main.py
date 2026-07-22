@@ -433,7 +433,7 @@ def handle_webhook_message():
 
     channel = data.get("channel", "External")
     text = data.get("text", "")
-    agent = data.get("agent", "Terry")
+    agent = resolve_agent_name(data.get("agent", "Terry"))
     media_paths = data.get("media_paths", [])
     
     sender_id = data.get("sender_id")
@@ -640,7 +640,7 @@ def handle_request_consent():
 @webhook_app.route('/api/updates', methods=['GET'])
 def get_updates():
     since = request.args.get('since', 0, type=int)
-    agent = request.args.get('agent', 'Terry')
+    agent = resolve_agent_name(request.args.get('agent', 'Terry'))
     with ui_updates_lock:
         updates = [u for u in ui_updates[since:] if u.get("agent") == agent]
     return jsonify({"updates": updates})
@@ -674,7 +674,7 @@ def create_agent():
     os.makedirs(agent_working_dir, exist_ok=True)
     os.makedirs(agent_files_dir, exist_ok=True)
     
-    config_file = os.path.join(agent_working_dir, "config.yaml")
+    config_file = os.path.join(agent_files_dir, "config.yaml")
     agent_config = {
         "AI_MODEL": models_config.get("DEFAULT_MODEL", {}).get("model", "gpt-5.4-nano"),
         "AI_NAME": agent_display_name,
@@ -722,8 +722,9 @@ def update_agent_settings():
     if not agent_name:
         return jsonify({"status": "error", "message": "agent is required"}), 400
         
-    agent_working_dir = os.path.join(AI_WORKSPACE_DIR, "agents", agent_name)
-    config_file = os.path.join(agent_working_dir, "config.yaml")
+    agent_files_dir = os.path.join(FILE_DIR, "agents", agent_name)
+    os.makedirs(agent_files_dir, exist_ok=True)
+    config_file = os.path.join(agent_files_dir, "config.yaml")
     
     current_config = {}
     if os.path.exists(config_file):
@@ -1530,10 +1531,11 @@ def update_and_get_agent_tools(agent_name):
     for t in tools:
         if "function" in t:
             name = t["function"]["name"]
+            desc = (t["function"].get("description") or "").strip().split("\n")[0]
             if name in disabled_tools:
-                disabled_tools_present.append(name)
+                disabled_tools_present.append((name, desc))
             else:
-                current_tools.append(name)
+                current_tools.append((name, desc))
                 agent_tool_schemas.append(t)
         else:
             agent_tool_schemas.append(t)
@@ -1542,10 +1544,18 @@ def update_and_get_agent_tools(agent_name):
     with open(tools_md_path, "w", encoding="utf-8") as f:
         f.write("### Tools Status\n\n")
         f.write("**Current tools:**\n")
-        for t in current_tools: f.write(f"- {t}\n")
+        for name, desc in current_tools:
+            if desc:
+                f.write(f"- **{name}**: {desc}\n")
+            else:
+                f.write(f"- **{name}**\n")
         if not current_tools: f.write("- None\n")
         f.write("\n**Disabled tools:**\n")
-        for t in disabled_tools_present: f.write(f"- {t}\n")
+        for name, desc in disabled_tools_present:
+            if desc:
+                f.write(f"- **{name}**: {desc}\n")
+            else:
+                f.write(f"- **{name}**\n")
         if not disabled_tools_present: f.write("- None\n")
         f.write("\n**Tools that require a restart:**\n")
         for t in needs_restart: f.write(f"- {t}\n")
@@ -1666,9 +1676,29 @@ def update_and_get_agent_skills(agent_name: str) -> list:
     return loaded_skills_content
 
 
+def resolve_agent_name(agent_name: str) -> str:
+    if not agent_name:
+        return "Terry"
+    agents_working_dir = os.path.join(AI_WORKSPACE_DIR, "agents")
+    if os.path.exists(agents_working_dir):
+        try:
+            for item in os.listdir(agents_working_dir):
+                if os.path.isdir(os.path.join(agents_working_dir, item)):
+                    if item.lower() == agent_name.lower():
+                        return item
+        except Exception:
+            pass
+    return agent_name
+
+
 def get_agent_info(agent_name: str) -> dict:
-    agent_working_dir = os.path.join(AI_WORKSPACE_DIR, "agents", agent_name)
-    agent_config_file = os.path.join(agent_working_dir, "config.yaml")
+    agent_name = resolve_agent_name(agent_name)
+    agent_files_dir = os.path.join(FILE_DIR, "agents", agent_name)
+    agent_config_file = os.path.join(agent_files_dir, "config.yaml")
+    if not os.path.exists(agent_config_file):
+        fallback_file = os.path.join(AI_WORKSPACE_DIR, "agents", agent_name, "config.yaml")
+        if os.path.exists(fallback_file):
+            agent_config_file = fallback_file
     info = {
         "AI_MODEL": models_config.get("DEFAULT_MODEL", {}).get("model", "gpt-5.4-nano"),
         "AI_NAME": agent_name,
@@ -1690,6 +1720,7 @@ def encode_image_to_base64(image_path: str) -> str:
 
 
 def process_message(context_channel: str, clean_prompt_text: str, agent_name: str = "Terry", media_paths: list = None) -> str:
+    agent_name = resolve_agent_name(agent_name)
     request_context.channel = context_channel
     request_context.agent_name = agent_name
     protocol = getattr(request_context, "protocol", {})
@@ -2086,7 +2117,7 @@ To create tools, read `custom-tools/CUSTOM_TOOLS_CREATION_TUTORIAL.md` first.
         update_and_get_agent_skills(agent_dir)
 
         # Initialize missing default files for any agent
-        config_file = os.path.join(agent_working_path, "config.yaml")
+        config_file = os.path.join(agent_files_path, "config.yaml")
         if not os.path.exists(config_file):
             agent_config = {
                 "AI_MODEL": models_config.get("DEFAULT_MODEL", {}).get("model", "gpt-5.4-nano"),

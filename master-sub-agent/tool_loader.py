@@ -14,9 +14,11 @@ MASTER_DIR = os.path.join(PROJECT_ROOT_DIR, "master")
 AI_WORKSPACE_DIR = os.path.join(MASTER_DIR, "working")
 FILE_DIR = os.path.join(MASTER_DIR, "files")
 RUBBISH_BIN_DIR = os.path.join(FILE_DIR, "rubbish_bin")
+ARTIFACTS_DIR = os.path.join(AI_WORKSPACE_DIR, "artifacts")
 
 os.makedirs(AI_WORKSPACE_DIR, exist_ok=True)
 os.makedirs(RUBBISH_BIN_DIR, exist_ok=True)
+os.makedirs(ARTIFACTS_DIR, exist_ok=True)
 
 class MockMCP:
     def tool(self, name=None):
@@ -29,6 +31,7 @@ mock_mcp = MockMCP()
 builtins.mcp = mock_mcp
 builtins.AI_WORKSPACE_DIR = AI_WORKSPACE_DIR
 builtins.RUBBISH_BIN_DIR = RUBBISH_BIN_DIR
+builtins.ARTIFACTS_DIR = ARTIFACTS_DIR
 
 CURRENT_AGENT_NAME = "Terry"
 
@@ -188,7 +191,7 @@ SUBAGENT_TOOL_NAMES = {
 }
 
 MASTER_TOOL_NAMES = [
-    "create_todo_list", "update_task_status", "read_file", "write_file", "call_subagent"
+    "create_todo_list", "update_task_status", "clear_shared_artifacts", "read_file", "write_file", "call_subagent"
 ]
 
 def load_all_tools():

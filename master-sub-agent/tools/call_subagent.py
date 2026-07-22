@@ -50,6 +50,9 @@ SUBAGENT_DIRECTORY_INFO = (
     "3. 'File Manager': Managing directory structure, creating directories, moving, renaming, and trashing files (list_directory_contents, list_all_directory_contents, create_directory, rename_item, move_item, trash_item, send_file_to_user, list_skills, read_skill).\n"
     "4. 'System Manager': Terminal command execution (run_command), environment control, service state (restart_mcp_server), and memory management (add_memory, remove_memory, list_skills, read_skill).\n"
     "5. 'Tester and Debugger': Executing tests via commands (run_command), inspecting logs, checking workspace directories (list_directory_contents, list_all_directory_contents), verifying code correctness, and reading skill definitions (list_skills, read_skill).\n\n"
+    "TRANSIENT ARTIFACTS USAGE RULE:\n"
+    "The 'artifacts/' directory is reserved strictly for temporary inter-agent scratch files and notes.\n"
+    "Do NOT store anything important for the end user in 'artifacts/', as all files inside 'artifacts/' will be automatically deleted/cleaned up. Place permanent user deliverables in main workspace files.\n\n"
     "SKILL ACCESS:\n"
     "All sub-agents have access to 'list_skills' and 'read_skill' to inspect custom skills.\n\n"
     "FOLLOW-UP DELEGATION:\n"
@@ -147,6 +150,7 @@ def call_subagent(subagent_name: str, task_instruction: str) -> str:
         return f"Error: {ve}"
 
     # Determine canonical subagent prompt
+    # Determine canonical subagent prompt
     norm_prompt_key = subagent_name
     for k in SUBAGENT_SYSTEM_PROMPTS.keys():
         if k.lower().replace(" ", "") == subagent_name.lower().replace(" ", ""):
@@ -158,10 +162,47 @@ def call_subagent(subagent_name: str, task_instruction: str) -> str:
 
     role_prompt = SUBAGENT_SYSTEM_PROMPTS.get(norm_prompt_key, f"You are the {subagent_name} Sub-Agent.")
 
+    # Set active agent name for tool context
+    previous_agent = getattr(builtins, "CURRENT_AGENT_NAME", "Master")
+    builtins.CURRENT_AGENT_NAME = norm_prompt_key
+
+    # Fetch assigned tasks specifically for this subagent from TASK_QUEUE
+    task_context_str = ""
+    try:
+        from tools.task_management import TASK_QUEUE, _is_task_assigned_to_agent
+        assigned_tasks = [t for t in TASK_QUEUE if _is_task_assigned_to_agent(t.get("assigned_agent", ""), norm_prompt_key)]
+        if assigned_tasks:
+            lines = [f"YOUR ASSIGNED TASKS (from Master Roadmap for {norm_prompt_key}):"]
+            for t in assigned_tasks:
+                status_symbol = "[x]" if t["status"] == "completed" else ("[/]" if t["status"] == "in_progress" else "[ ]")
+                lines.append(f"  {status_symbol} Task #{t['id']}: {t['description']} (Status: {t['status']})")
+                if t.get("result_summary"):
+                    lines.append(f"      Result: {t['result_summary']}")
+            task_context_str = "\n".join(lines) + "\n\n"
+    except Exception as e:
+        task_context_str = ""
+
+    # Fetch available temporary artifacts filenames from artifacts/ directory
+    artifacts_context_str = ""
+    try:
+        from tools.task_management import get_artifacts_dir
+        art_dir = get_artifacts_dir()
+        if os.path.exists(art_dir):
+            artifact_files = [f"artifacts/{f}" for f in sorted(os.listdir(art_dir)) if os.path.isfile(os.path.join(art_dir, f))]
+            if artifact_files:
+                art_lines = [f"  - {p}" for p in artifact_files]
+                artifacts_context_str = "AVAILABLE SHARED ARTIFACTS (Temporary scratch files in artifacts/):\n" + "\n".join(art_lines) + "\n(Use 'read_file' if you need to inspect the contents of any artifact file above.)\n\n"
+    except Exception:
+        artifacts_context_str = ""
+
     print(f"\n==========================================================================")
-    print(f"[Master Agent -> Sub-Agent: '{subagent_name}'] Delegating Task")
+    print(f"[Master Agent -> Sub-Agent: '{norm_prompt_key}'] Delegating Task")
     print(f"Instructions: {task_instruction}")
     print(f"Available Tools: {list(sub_funcs.keys())}")
+    if task_context_str:
+        print(f"Loaded Assigned Tasks Context:\n{task_context_str.strip()}")
+    if artifacts_context_str:
+        print(f"Loaded Shared Artifacts Context:\n{artifacts_context_str.strip()}")
     print(f"==========================================================================")
 
     sub_system_prompt = (
@@ -171,7 +212,9 @@ def call_subagent(subagent_name: str, task_instruction: str) -> str:
         f"SESSION ISOLATION & MEMORY:\n"
         f"You are running in a dedicated mini-session for this specific task.\n"
         f"Working Directory: 'master/working'\n"
-        f"Task Instruction: {task_instruction}\n"
+        f"Task Instruction: {task_instruction}\n\n"
+        f"{task_context_str}"
+        f"{artifacts_context_str}"
         f"All tool calls and results are remembered in this mini-session context.\n"
         f"When complete, call 'task_complete' with your result summary, or 'task_failed' if blocked."
     )
@@ -185,8 +228,9 @@ def call_subagent(subagent_name: str, task_instruction: str) -> str:
     step_count = 0
     final_output = ""
 
-    while step_count < max_steps:
-        step_count += 1
+    try:
+        while step_count < max_steps:
+            step_count += 1
 
         api_params = {
             "model": model_name,
@@ -309,4 +353,6 @@ def call_subagent(subagent_name: str, task_instruction: str) -> str:
                 print(f"[Sub-Agent: '{subagent_name}'] Response: {final_output}\n")
             break
 
-    return final_output or f"Sub-Agent '{subagent_name}' finished task execution."
+        return final_output or f"Sub-Agent '{subagent_name}' finished task execution."
+    finally:
+        builtins.CURRENT_AGENT_NAME = previous_agent

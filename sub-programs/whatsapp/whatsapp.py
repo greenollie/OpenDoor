@@ -63,7 +63,11 @@ CONFIG_FILE = os.path.join(Path(__file__).resolve().parent, "whatsapp_config.yam
 WEBHOOK_URL = "http://127.0.0.1:5050/api/message"
 
 def get_agent_ai_name(agent_name: str) -> str:
-    agent_config_file = os.path.join(MAIN_DIR, "master", "working", "agents", agent_name, "config.yaml")
+    agent_config_file = os.path.join(MAIN_DIR, "master", "files", "agents", agent_name, "config.yaml")
+    if not os.path.exists(agent_config_file):
+        fallback_file = os.path.join(MAIN_DIR, "master", "working", "agents", agent_name, "config.yaml")
+        if os.path.exists(fallback_file):
+            agent_config_file = fallback_file
     if os.path.exists(agent_config_file):
         try:
             with open(agent_config_file, "r", encoding="utf-8") as f:

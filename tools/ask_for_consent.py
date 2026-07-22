@@ -1,4 +1,4 @@
-@mcp.tool(name="ask_for_consent")
+@mcp.tool()
 def ask_for_consent_tool(title: str, description: str) -> str:
     """Ask the user for consent or approval before carrying out an action.
     

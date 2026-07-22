@@ -547,11 +547,11 @@ def edit_main_config():
             "api_base": api_base
         }
 
-    # 1. Main Model Selection
-    default_model_info = prompt_model_details("Main", models_cfg.get("DEFAULT_MODEL", {}), default_main)
+    # 1. Default Main Model Selection
+    default_model_info = prompt_model_details("Default Main", models_cfg.get("DEFAULT_MODEL", {}), default_main)
 
-    # 2. Subagent Model Selection
-    subagent_model_info = prompt_model_details("Subagent", models_cfg.get("DEFAULT_SUBAGENT_MODEL", models_cfg.get("SUBAGENT_MODEL", {})), default_sub)
+    # 2. Default Subagent Model Selection
+    subagent_model_info = prompt_model_details("Default Subagent", models_cfg.get("DEFAULT_SUBAGENT_MODEL", models_cfg.get("SUBAGENT_MODEL", {})), default_sub)
 
     # 3. Embedding Model Selection
     embedding_model_info = prompt_embedding_model_details(models_cfg.get("EMBEDDING_MODEL", {}))
